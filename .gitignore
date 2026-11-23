@@ -1,0 +1,31 @@
+# Entorno y compilación
+.venv/
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datos del usuario, secretos y registros (nunca al repositorio)
+.env
+.env.*
+!.env.example
+secrets/
+logs/
+models/
+datos-local/
+config.yaml
+layout.json
+whatsapp-mcp.json
+*.pem
+*.key
+*.token
+*.log
+*.zip
+
+# Extras
+build-out.txt
+selftest_frozen.txt
+*whatsapp*.json
+*.zip

@@ -1,0 +1,2 @@
+# Desarrollo: pruebas (python -m pytest). Instalar además de requirements.txt.
+pytest>=8

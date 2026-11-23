@@ -1,0 +1,29 @@
+# Versiones: las de Pepito (uv.lock) más las de Jarvis. Instalar en un venv de Python 3.12 o 3.13.
+keyring>=25
+psutil>=5.9
+edge-tts>=7.3.1
+fastapi>=0.161.1
+faster-whisper>=1.2.1
+httpx>=0.28.1
+miniaudio>=1.71
+numpy>=2.5.4
+onnx-asr[cpu,hub]>=0.12.0
+openwakeword>=0.4.0
+piper-tts>=1.8.0
+pycaw>=20260927
+python-dotenv>=1.2.4
+pyyaml>=6.0.3
+sounddevice>=0.5.6
+uvicorn[standard]>=0.54.0
+opencv-contrib-python>=4.8.0   # una sola build de OpenCV: opencv-python y contrib chocan (ambas traen cv2)
+mediapipe>=0.10.9
+pygame>=2.5.0
+pyinstaller>=6.0
+aiohttp>=3.14.5
+websockets>=17.3
+comtypes>=1.4.17
+scipy>=1.18.1
+pyjwt
+qrcode
+ruamel.yaml
+zeroconf

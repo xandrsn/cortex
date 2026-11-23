@@ -186,7 +186,7 @@ class Mail:
         if not self.accounts:
             raise RuntimeError("El correo no está configurado (faltan las contraseñas de aplicación en .env)")
         k = (key or "").lower()
-        for a in self.accounts:   # primero la letra exacta («s» también está dentro de «charlieandersen»)
+        for a in self.accounts:   # primero la letra exacta («s» también está dentro de «correo»)
             if k == a.key:
                 return a
         for a in self.accounts:

@@ -635,7 +635,7 @@ function renderSpotify(s) {
 function renderSpotifySettings() {
   const s = spotify;
   const info = $("#spSettingsInfo");
-  info.textContent = !s.client_id ? "Falta SPOTIFY_CLIENT_ID en C:\\Pepito\\.env"
+  info.textContent = !s.client_id ? "Falta SPOTIFY_CLIENT_ID en C:la carpeta del programa\\.env"
     : s.connected ? "Conectado con tu cuenta." : "Sin conectar.";
   $("#spSettingsConnect").hidden = s.connected || !s.client_id;
   $("#spLogout").hidden = !s.connected;
@@ -1059,7 +1059,7 @@ function renderWhatsApp(m) {
   if (waOpen) { refreshWaChat(); return; }
   const state = $("#waState");
   if (!m.available) {
-    setHTML("#waList", `<li class="setup">Falta el puente de WhatsApp (C:\\Pepito\\whatsapp-mcp).</li>`);
+    setHTML("#waList", `<li class="setup">Falta el puente de WhatsApp (C:la carpeta del programa\\whatsapp-mcp).</li>`);
     state.textContent = "";
     return;
   }

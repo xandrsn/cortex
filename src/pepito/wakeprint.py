@@ -3,7 +3,7 @@
 Usa los modelos de openWakeWord (espectrograma + embeddings de voz de Google, pensados para palabras de
 activación con pocos ejemplos) y DTW de subsecuencia: busca el trozo del audio que más se parece a
 alguna plantilla. Las plantillas son las muestras que graba el usuario desde Ajustes (en
-C:\\Pepito\\wake, fuera de Drive) y, de base, unas cuantas voces sintéticas.
+C:la carpeta del programa\\wake, fuera de Drive) y, de base, unas cuantas voces sintéticas.
 """
 
 import asyncio

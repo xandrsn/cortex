@@ -1,7 +1,7 @@
 """Spotify con la cuenta personal del usuario (Web API, modo desarrollo, Premium).
 
 Login por PKCE: solo hace falta el Client ID de la app de Spotify (en .env, SPOTIFY_CLIENT_ID); el token
-se guarda en C:\\Pepito\\secrets, nunca en Drive. Por defecto suena en el Spotify de escritorio del
+se guarda en C:la carpeta del programa\\secrets, nunca en Drive. Por defecto suena en el Spotify de escritorio del
 portátil (sale por el altavoz de Windows); se puede elegir otro dispositivo Connect en Ajustes.
 """
 

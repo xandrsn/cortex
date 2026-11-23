@@ -8,7 +8,7 @@ la sesión en secrets/bank_session.json.
 Los bancos solo permiten ~4 consultas al día sin el usuario delante, así que se cachea 6 h y, aunque se
 pida refrescar, nunca se consulta más de una vez cada 10 min.
 
-Uso a mano (desde C:\\Pepito\\src):  python -m pepito.bank auth | resumen [--forzar] | estado
+Uso a mano (desde C:la carpeta del programa\\src):  python -m pepito.bank auth | resumen [--forzar] | estado
 """
 
 import json

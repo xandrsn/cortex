@@ -207,7 +207,7 @@ class Spotify:
             echos = [d["name"] for d in self.devices() if "echo" in d["name"].lower()]
             target = echos[0] if echos else "echo"
         else:
-            target = {"cocina": "kitchen", "pc": "pc-charlie"}.get(w, where)
+            target = {"cocina": "kitchen"}.get(w, where)
         device = self._find_device(target)
         self.move_to(device)
         name = next((d["name"] for d in self.devices() if d["id"] == device), where)
@@ -305,7 +305,7 @@ class Spotify:
             return ""
         return f"{item['name']}, de {', '.join(a['name'] for a in item.get('artists', []))}"
 
-    # ---------- bajar la música mientras habla Pepito ----------
+    # ---------- bajar la música mientras habla Cortex ----------
     def duck(self) -> None:
         if self._ducked_volume is not None:
             return
@@ -319,7 +319,7 @@ class Spotify:
         if self._restored and volume == self._restored[1] and time.monotonic() - self._restored[2] < 180:
             volume = self._restored[0]
         self._ducked_volume = volume
-        self._api("PUT", f"/me/player/volume?volume_percent={max(10, volume // 2)}")   # a la mitad: que se oiga a Pepito sin hundir la música
+        self._api("PUT", f"/me/player/volume?volume_percent={max(10, volume // 2)}")   # a la mitad: que se oiga a Cortex sin hundir la música
 
     def unduck(self) -> None:
         volume, self._ducked_volume = self._ducked_volume, None

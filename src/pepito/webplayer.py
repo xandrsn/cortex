@@ -1,6 +1,6 @@
 """Reproductor de webs de vídeo (RTVE Play, YouTube, Netflix, Pluto TV…).
 
-Pepito abre la página en una ventana de Edge con su propio perfil (las sesiones que Charlie inicie se quedan
+Cortex abre la página en una ventana de Edge con su propio perfil (las sesiones que Charlie inicie se quedan
 guardadas) y la controla por el protocolo de depuración (CDP): en cualquier página busca el <video> principal
 —también dentro de iframes— y lo maneja igual en todas. La URL la saca video_sites (con la búsqueda de cada web)
 o Claude. Vale cualquier web (salvo un servicio desactivado en Ajustes o una de la lista de bloqueadas); en las
@@ -574,7 +574,7 @@ class WebPlayer:
             return None
 
     def _panel_hwnd(self, video: int) -> int | None:
-        """La ventana del panel (Edge en modo app con título «Pepito»), que no sea la de vídeo."""
+        """La ventana del panel (Edge en modo app con título «Cortex»), que no sea la de vídeo."""
         found = []
 
         @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
@@ -582,7 +582,7 @@ class WebPlayer:
             buf, cls = ctypes.create_unicode_buffer(64), ctypes.create_unicode_buffer(64)
             _user32.GetWindowTextW(ctypes.c_void_p(h), buf, 64)
             _user32.GetClassNameW(ctypes.c_void_p(h), cls, 64)
-            if h != video and buf.value == "Pepito" and cls.value.startswith("Chrome_WidgetWin") \
+            if h != video and buf.value == "Cortex" and cls.value.startswith("Chrome_WidgetWin") \
                     and _user32.IsWindowVisible(ctypes.c_void_p(h)):
                 found.append(h)
             return True
@@ -760,7 +760,7 @@ class WebPlayer:
                 wall = state is None and stuck >= 3 and self._eval(pages[0], video_sites.WALL_JS)
             except Exception:
                 wall = None
-            if wall:   # pide cuenta: eso lo hace Charlie, no Pepito
+            if wall:   # pide cuenta: eso lo hace Charlie, no Cortex
                 log.info("Autoplay: %s pide iniciar sesión (%s)", _host(url), wall)
                 self.wall = _host(url)
                 return

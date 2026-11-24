@@ -3,7 +3,7 @@
     - [ ] leche
     - [x] huevos
 
-El resto del archivo (tiendas, lista base…) no se toca. Pepito (Claude) puede editar la misma sección.
+El resto del archivo (tiendas, lista base…) no se toca. Cortex (Claude) puede editar la misma sección.
 """
 
 import logging

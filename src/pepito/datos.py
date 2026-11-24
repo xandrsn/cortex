@@ -249,8 +249,8 @@ INTENTS = [
 def route(text: str) -> str | None:
     from .spotify import norm
     t = norm(text)
-    t = re.sub(r"^(oye |hey |venga )?(pepito )?", "", t)
-    t = re.sub(r" ?(por favor|porfa|pepito)$", "", t).strip()
+    t = re.sub(r"^(oye |hey |venga )?(cortex )?", "", t)
+    t = re.sub(r" ?(por favor|porfa|cortex)$", "", t).strip()
     for pattern, intent in INTENTS:
         if re.fullmatch(pattern, t):
             try:
@@ -295,7 +295,7 @@ def build_estado(now: datetime) -> str:
     L = [
         f"# Estado de {settings['user_name'] or 'el usuario'}",
         "",
-        "> Resumen automático que mantiene Pepito (el asistente de casa) para el Claude del móvil. **No lo edites:**",
+        "> Resumen automático que mantiene Cortex (el asistente de casa) para el Claude del móvil. **No lo edites:**",
         "> se regenera solo. Los datos de verdad están en los otros ficheros de esta carpeta (ver CLAUDE.md).",
         "",
         f"Actualizado: {DAYS_ES[now.weekday()]} {now:%d/%m/%Y %H:%M} (hora de Madrid)",

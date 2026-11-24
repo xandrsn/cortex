@@ -6,7 +6,8 @@ import pytest
 
 from gesture.gesture_detector import GestureDetector
 from gesture.snap_zones import build_zones, nearest_zone_id
-from pepito import router, timers
+from pepito import router, timers, whatsapp
+from pepito.listener import find_wake
 
 
 def _hand(finger_ratios: dict[int, float]) -> dict[int, tuple[float, float]]:
@@ -54,10 +55,45 @@ def test_missing_wrist_is_never_a_gesture():
     assert not det._detect_fist(pos) and not det._detect_open(pos) and not det._detect_peace(pos)
 
 
-@pytest.mark.parametrize("text", ["Pepito, ¿qué hora es?", "que hora es", "la hora"])
+@pytest.mark.parametrize("text", ["Cortex, ¿qué hora es?", "que hora es", "la hora"])
 def test_router_answers_time_questions(text):
     answer = router.route(text, "es")
     assert answer and answer.startswith("Son las ")
+
+
+@pytest.mark.parametrize("text, sens, rest", [
+    ("Cortex, pon música", 1, "pon música"), ("Córtex pon música", 1, "pon música"), ("Pon algo de música, Cortex", 2, "Pon algo de música"),
+    ("Oye Kortex, qué hora es", 2, "qué hora es"), ("Cor tex para", 2, "para"), ("Cortecs.", 2, ""), ("Gortex, para", 3, "para"),
+    ("Kortex para", 1, None), ("Pepito, pon música", 3, None), ("Cortes de pelo", 3, None), ("El corte de luz", 3, None),
+    ("Corteza de árbol", 3, None), ("Contexto del correo", 3, None), ("Corto y cambio", 3, None),
+])
+def test_wake_word(text, sens, rest):
+    assert find_wake(text, sens) == rest
+
+
+def test_whatsapp_only_sends_when_the_user_allowed_it(monkeypatch):
+    posted = []
+
+    class Reply:
+        def json(self):
+            return {"success": True}
+
+    monkeypatch.setattr(whatsapp, "settings", {"whatsapp_mode": "read"})
+    monkeypatch.setattr(whatsapp.httpx, "post", lambda url, **k: posted.append(k["json"]) or Reply())
+    wa = whatsapp.WhatsApp()
+    wa.chats, wa.state = [{"jid": "1@s.whatsapp.net"}], "connected"
+    monkeypatch.setattr(wa, "_owns_port", lambda: True)
+    assert wa.send("1@s.whatsapp.net", "hola")          # solo lectura
+    whatsapp.settings["whatsapp_mode"] = "write"
+    assert wa.send("2@s.whatsapp.net", "hola")          # chat desconocido
+    assert wa.send("1@s.whatsapp.net", "  ")
+    assert wa.send("1@s.whatsapp.net", "x" * 4001)
+    monkeypatch.setattr(wa, "_owns_port", lambda: False)
+    assert wa.send("1@s.whatsapp.net", "hola")          # el puerto es de otro puente
+    assert posted == []
+    monkeypatch.setattr(wa, "_owns_port", lambda: True)
+    assert wa.send("1@s.whatsapp.net", " hola ") == ""
+    assert posted == [{"recipient": "1@s.whatsapp.net", "message": "hola"}]
 
 
 def test_router_leaves_other_requests_to_claude():

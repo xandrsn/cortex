@@ -15,6 +15,8 @@ secrets/
 logs/
 models/
 datos-local/
+wake/
+wake_cortex/
 config.yaml
 layout.json
 whatsapp-mcp.json

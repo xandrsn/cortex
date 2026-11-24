@@ -1,4 +1,4 @@
-"""Asistente de voz y panel (Pepito), parte de Cortex."""
+"""Asistente de voz y panel, parte de Cortex."""
 
 
 def main() -> None:

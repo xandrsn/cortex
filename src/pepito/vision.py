@@ -592,7 +592,7 @@ class Vision:
         self._hands_pts: list = []
         self.hold = Hold()
         self.gate = Gate()
-        self.yield_cpu = False   # lo pone Pepito mientras transcribe
+        self.yield_cpu = False   # lo pone Cortex mientras transcribe
         self.classifier = CustomClassifier()
         self._custom: dict[str, dict] = {}
         self._rec: dict | None = None
@@ -863,7 +863,7 @@ class Vision:
             self.attention = Attention()
 
     def _hands_active(self) -> bool:
-        if self.yield_cpu and not self._rec:   # Pepito está transcribiendo: la CPU, para eso (~25 % más rápido)
+        if self.yield_cpu and not self._rec:   # Cortex está transcribiendo: la CPU, para eso (~25 % más rápido)
             return False
         return bool(self._rec) or not cfg("gestures_require_look") or self.attention.engaged
 

@@ -1,7 +1,8 @@
-"""WhatsApp (solo lectura): arranca el puente de whatsapp-mcp y lee sus mensajes para el panel y los avisos.
+"""WhatsApp: arranca el puente de whatsapp-mcp y lee sus mensajes para el panel y los avisos.
 
 El puente (whatsapp-mcp/whatsapp-bridge, Go + whatsmeow) se vincula como «dispositivo» con un QR la primera vez
-y guarda los mensajes en store/messages.db (SQLite). Aquí solo se lee esa base, nunca se envía nada.
+y guarda los mensajes en store/messages.db (SQLite). Aquí se lee esa base; solo se envía lo que el
+usuario escribe en el panel, y solo si eligió «leer y escribir» (whatsapp_mode).
 El QR que pide al vincular se escribe en store/qr.txt y el panel lo pinta para escanearlo.
 """
 
@@ -24,7 +25,8 @@ log = logging.getLogger("whatsapp")
 BRIDGE_DIR = ROOT / "whatsapp-mcp" / "whatsapp-bridge"
 BRIDGE_EXE = BRIDGE_DIR / "whatsapp-bridge.exe"
 STORE = BRIDGE_DIR / "store"
-BRIDGE_API = "http://127.0.0.1:8080/api"
+BRIDGE_PORT = 8080
+BRIDGE_API = f"http://127.0.0.1:{BRIDGE_PORT}/api"
 LOG_FILE = ROOT / "logs" / "whatsapp-bridge.log"
 MOTES_FILE = lambda: Path(settings["data_dir"]) / "motes.yaml"
 PREFS_FILE = lambda: Path(settings["data_dir"]) / "whatsapp.yaml"   # qué chats avisan
@@ -60,17 +62,22 @@ class WhatsApp:
         self.available = BRIDGE_EXE.exists()
         self.state = "off"           # off · starting · qr · connected · error
         self._stop = False
+        self._started = False
         self._last_rowid: int | None = None   # None = primera lectura: lo que ya hay no se anuncia
         self.chats: list[dict] = []
         self._contact_names: dict[str, str] = {}
         self._contacts_at = 0.0
         self._lid_pn: dict[str, str] = {}
+        # shortcut: el puente no guarda lo que envía, así que se ve hasta reiniciar; guardarlo si se echa en falta
+        self._sent: dict[str, list[dict]] = {}
 
     # ---------- puente ----------
-    # El puente va por libre: si Pepito se reinicia, sigue conectado y Pepito se engancha a él al volver
+    # El puente va por libre: si Cortex se reinicia, sigue conectado y Cortex se engancha a él al volver
     # (antes se reconectaba en cada reinicio y durante ese rato no llegaba nada).
-    def start(self):
-        if self.available:
+    def start(self, link: bool = False):
+        """Al arrancar solo se lanza si ya está vinculado; `link` = lo pide el usuario para vincularlo con el QR."""
+        if self.available and not self._started and (link or (STORE / "whatsapp.db").exists()):
+            self._started = True
             threading.Thread(target=self._supervise, name="whatsapp-bridge", daemon=True).start()
 
     def stop(self):
@@ -98,7 +105,7 @@ class WhatsApp:
             self.state = "connected"
 
     def _supervise(self):
-        STORE.mkdir(exist_ok=True)
+        STORE.mkdir(parents=True, exist_ok=True)
         proc = self._bridge()
         if proc:
             log.info("Puente de WhatsApp ya en marcha (pid %s): me engancho", proc.pid)
@@ -129,6 +136,7 @@ class WhatsApp:
                 except (OSError, psutil.Error) as e:
                     log.warning("No pude arrancar el puente de WhatsApp: %s", e)
                     self.state = "error"
+                    self._started = False
                     return
                 log.info("Puente de WhatsApp arrancado")
             try:   # lo nuevo del registro del puente dice en qué estado está
@@ -208,7 +216,7 @@ class WhatsApp:
                 c["muted"] = muted
 
     def motes(self) -> dict[str, str]:
-        """Nombre de WhatsApp → cómo lo dice Pepito (motes.yaml, en la carpeta de datos)."""
+        """Nombre de WhatsApp → cómo lo dice Cortex (motes.yaml, en la carpeta de datos)."""
         try:
             data = yaml.safe_load(MOTES_FILE().read_text(encoding="utf-8")) or {}
             return {str(k): str(v) for k, v in data.items() if v}
@@ -221,7 +229,7 @@ class WhatsApp:
             motes[name] = mote.strip()
         else:
             motes.pop(name, None)
-        text = "# Motes de WhatsApp: cómo dice Pepito a cada contacto («Nombre en WhatsApp: mote»).\n"
+        text = "# Motes de WhatsApp: cómo dice Cortex a cada contacto («Nombre en WhatsApp: mote»).\n"
         text += yaml.safe_dump(motes, allow_unicode=True, sort_keys=True, default_flow_style=False) if motes else ""
         MOTES_FILE().write_text(text, encoding="utf-8")
 
@@ -307,11 +315,11 @@ class WhatsApp:
                                   WHERE chat_jid = ? ORDER BY timestamp DESC LIMIT ?""", (jid, limit)).fetchall()
             name, real = show(jid)
             return {"jid": jid, "name": name, "real": real, "group": jid.endswith("@g.us"), "muted": self.muted(jid),
-                    "messages": [
+                    "messages": sorted([
                 {"id": r["id"], "media": r["media_type"] or "", "caption": r["content"] or "",
                  "from": "" if r["is_from_me"] else show(r["sender"])[0], "mine": bool(r["is_from_me"]),
                  "text": r["content"] or _media(r["media_type"]), "time": _ts(r["timestamp"])}
-                for r in reversed(rows)]}
+                for r in reversed(rows)] + self._sent.get(jid, []), key=lambda m: m["time"])}
         finally:
             con.close()
 
@@ -326,6 +334,40 @@ class WhatsApp:
         if STORE.resolve() not in path.parents:   # solo ficheros de su carpeta
             raise RuntimeError("ruta inesperada")
         return path
+
+    def _owns_port(self) -> bool:
+        """¿Escucha en el puerto el puente de Cortex? Puede haber otro, vinculado a otra cuenta."""
+        proc = self._bridge()
+        try:
+            return bool(proc) and any(c.laddr and c.laddr.port == BRIDGE_PORT and c.status == psutil.CONN_LISTEN
+                                      for c in proc.net_connections("tcp"))
+        except psutil.Error:
+            return False
+
+    def send(self, jid: str, text: str) -> str:
+        """Envía un texto a un chat de la lista. Devuelve el error, o "" si salió."""
+        text = text.strip()
+        if settings["whatsapp_mode"] != "write":
+            return "WhatsApp está en solo lectura (Ajustes → Cerebro)."
+        if not any(c["jid"] == jid for c in self.chats):
+            return "Ese chat no está en la lista."
+        if not 1 <= len(text) <= 4000:
+            return "El mensaje tiene que tener entre 1 y 4000 letras."
+        if self.state != "connected" or not self._owns_port():
+            return "WhatsApp no está conectado."
+        try:
+            r = httpx.post(f"{BRIDGE_API}/send", json={"recipient": jid, "message": text}, timeout=30)
+            ok = r.json().get("success") is True
+        except httpx.TimeoutException:
+            return "WhatsApp no ha contestado a tiempo: mira en el móvil si ha salido antes de repetirlo."
+        except (httpx.HTTPError, ValueError, AttributeError):
+            ok = False
+        if not ok:
+            return "No se ha podido enviar."
+        now = time.time()
+        self._sent.setdefault(jid, []).append({"id": f"sent-{now}", "media": "", "caption": "", "from": "", "mine": True,
+                                               "text": text, "time": now})
+        return ""
 
     def summary(self) -> dict:
         return {"available": self.available, "state": self.state, "qr": self.qr, "chats": self.chats}

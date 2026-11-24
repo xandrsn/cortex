@@ -1,4 +1,4 @@
-"""Cuentas de webs de vídeo (usuario y contraseña) para que Pepito inicie sesión solo.
+"""Cuentas de webs de vídeo (usuario y contraseña) para que Cortex inicie sesión solo.
 
 Charlie las escribe en el panel (Ajustes → Vídeo). La contraseña va al Administrador de credenciales de Windows
 (cifrada con su usuario de Windows); aquí solo queda qué web y qué usuario, en secrets/ (fuera de Drive y de git).

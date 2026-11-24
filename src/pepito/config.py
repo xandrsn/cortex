@@ -1,4 +1,4 @@
-"""Rutas y ajustes persistentes de Pepito (config.yaml en la carpeta de código, sin secretos)."""
+"""Rutas y ajustes persistentes de Cortex (config.yaml en la carpeta de código, sin secretos)."""
 
 import logging
 import os
@@ -19,7 +19,7 @@ CONFIG_FILE = ROOT / "config.yaml"
 load_dotenv(ROOT / ".env")   # secretos (Spotify…): solo en la carpeta de código, nunca en Drive
 
 DEFAULTS = {
-    "user_name": "",            # cómo llama Pepito al usuario en los textos; vacío = "el usuario"
+    "user_name": "",            # cómo llama Cortex al usuario en los textos; vacío = "el usuario"
     "data_dir": str(ROOT / "datos-local"),
     "claude_model": "haiku",
     "session_idle_minutes": 30,
@@ -34,7 +34,7 @@ DEFAULTS = {
     "barge_in": True,
     "quiet_mode": False,          # modo silencio: los avisos de correo y novedades no se dicen en voz alta
     "auto_update_hours": 6,       # actualización automática (Betis, tareas…) si queda plan de Claude; 0 = nunca
-    # webs de vídeo que Pepito puede abrir y controlar (Charlie inicia sesión una vez en esa ventana)
+    # webs de vídeo que Cortex puede abrir y controlar (Charlie inicia sesión una vez en esa ventana)
     "video_services": [
         {"name": "YouTube", "url": "https://www.youtube.com", "domains": ["youtube.com", "youtu.be"], "enabled": True},
         {"name": "RTVE Play", "url": "https://www.rtve.es/play/", "domains": ["rtve.es"], "enabled": True},
@@ -56,6 +56,11 @@ DEFAULTS = {
     "theme": "light",            # light | dark | auto
     "spotify_device": "",        # "" = este portátil (Spotify de escritorio); si no, nombre del dispositivo Connect
     "ui_port": 8765,
+    # Primera vez: el instalador deja en config.yaml lo que se eligió y el asistente del panel lo termina
+    "setup_done": False,
+    "setup_widgets": [],             # tarjetas elegidas al instalar ([] = las de serie)
+    "setup_accounts": ["claude", "spotify", "email", "whatsapp"],
+    "whatsapp_mode": "read",     # read (solo leer) | write (leer y escribir desde el panel)
     "window_gestures": True,     # Cortex: control de ventanas con gestos (src/gesture); necesita webcam
     # Panel
     "accent": "#0b8f55",
@@ -67,7 +72,7 @@ DEFAULTS = {
     "quiet_end": "",
     # Cámara y gestos (vision.py)
     "camera_index": 0,
-    "gestures_enabled": False,       # gestos de la visión de Pepito; apagado: comparte webcam con window_gestures
+    "gestures_enabled": False,       # gestos de la visión de Cortex; apagado: comparte webcam con window_gestures
     "gestures_require_look": True,   # los gestos solo cuentan mirando a la pantalla
     "look_max_angle": 22,            # grados de giro/cabeceo máximos para «mirando»
     "look_pitch_offset": 0,          # grados: centro del cabeceo (+ = abajo, la pantalla está bajo la cámara)

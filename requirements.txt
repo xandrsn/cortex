@@ -1,6 +1,6 @@
-# Versiones: las de Pepito (uv.lock) más las de Jarvis. Instalar en un venv de Python 3.12 o 3.13.
+# Versiones: las de Cortex (uv.lock) más las de Jarvis. Instalar en un venv de Python 3.12 o 3.13.
 keyring>=25
-psutil>=5.9
+psutil>=6.0
 edge-tts>=7.3.1
 fastapi>=0.161.1
 faster-whisper>=1.2.1

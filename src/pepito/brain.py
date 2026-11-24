@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from .config import ROOT, settings
@@ -39,6 +40,35 @@ def _allowed() -> list[str]:
         return ["--allowedTools", f"{TOOLS},{CONNECTORS},{WA_TOOLS}", "--mcp-config", str(WA_MCP)]
     return ["--allowedTools", f"{TOOLS},{CONNECTORS}"]
 DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def claude_exe() -> str | None:
+    """El ejecutable de Claude Code. El instalador oficial lo deja en ~/.local/bin, que no está en el PATH de un
+    proceso arrancado antes de instalarlo."""
+    local = Path.home() / ".local" / "bin" / "claude.exe"
+    return shutil.which("claude") or (str(local) if local.exists() else None)
+
+
+def claude_status() -> dict:
+    """¿Está Claude Code instalado y con sesión? (solo eso: ni correo ni organización)"""
+    exe = claude_exe()
+    if not exe:
+        return {"installed": False, "logged": False}
+    try:
+        r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
+        logged = bool(json.loads(r.stdout).get("loggedIn"))
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        logged = False
+    return {"installed": True, "logged": logged}
+
+
+def claude_login() -> None:
+    """Abre una consola con el inicio de sesión oficial de Claude (lo pide el usuario con el botón)."""
+    exe = claude_exe()
+    if not exe:
+        raise BrainError("start", "No encuentro el ejecutable de Claude Code")
+    subprocess.Popen([exe, "auth", "login"], creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 
 class BrainError(Exception):
@@ -68,7 +98,7 @@ class Brain:
 
     # ---------- proceso ----------
     def _command(self, resume: str | None) -> list[str]:
-        exe = shutil.which("claude")
+        exe = claude_exe()
         if not exe:
             raise BrainError("start", "No encuentro el ejecutable de Claude Code")
         model = settings["claude_model"]
@@ -254,7 +284,7 @@ class Brain:
 
 def one_shot(prompt: str, timeout: float = 420) -> str:
     """Una consulta suelta, aparte de la conversación (para la actualización automática). Devuelve el texto."""
-    exe = shutil.which("claude")
+    exe = claude_exe()
     if not exe:
         raise BrainError("start", "No encuentro el ejecutable de Claude Code")
     cmd = [exe, "-p", prompt, "--output-format", "text", "--model", settings["claude_model"],

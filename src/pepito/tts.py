@@ -1,6 +1,6 @@
 """Síntesis de voz: voces neuronales de Edge y Piper local como respaldo.
 
-El audio de Edge llega en MP3 por trozos; se va decodificando y entregando para que Pepito empiece a
+El audio de Edge llega en MP3 por trozos; se va decodificando y entregando para que Cortex empiece a
 hablar antes de que la frase esté entera.
 
 Abrir la conexión con Microsoft es casi todo el retraso (~0,5 s de ~0,6 s por frase), así que se deja abierta

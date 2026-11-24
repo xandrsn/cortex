@@ -1,6 +1,6 @@
-"""Detector de «Pepito» entrenado a medida (tools/train_wake.py): escucha la palabra continuamente.
+"""Detector de «Cortex» entrenado a medida (tools/train_wake.py): escucha la palabra continuamente.
 
-Usa los embeddings de openWakeWord (uno cada 80 ms) y una red pequeña entrenada con miles de «Pepito»
+Usa los embeddings de openWakeWord (uno cada 80 ms) y una red pequeña entrenada con miles de «Cortex»
 sintéticos y las grabaciones de Charlie. No transcribe nada: salta en cuanto acaba la palabra.
 """
 
@@ -16,8 +16,8 @@ from .config import MODELS_DIR, settings
 
 log = logging.getLogger("wakeword")
 
-MODEL_FILE = MODELS_DIR / "pepito_wake.npz"
-REAL_DIR = MODELS_DIR / "wake_train"   # activaciones reales: pos_real (luego hablaste) y neg_real (falsas)
+MODEL_FILE = MODELS_DIR / "cortex_wake.npz"
+REAL_DIR = MODELS_DIR / "wake_train_cortex"   # activaciones reales: pos_real (luego hablaste) y neg_real (falsas)
 KEEP_REAL = 300
 # Umbral de la red según la sensibilidad (1 baja · 2 media · 3 alta)
 THRESHOLDS = {1: 0.95, 2: 0.85, 3: 0.7}
@@ -37,7 +37,7 @@ class WakeWord:
         self._consec = 1
         self._streak = 0
         if not self.available:
-            log.info("Sin modelo de «Pepito» entrenado; se usa el método por transcripción")
+            log.info("Sin modelo de «Cortex» entrenado; se usa el método por transcripción")
             return
         from openwakeword.utils import AudioFeatures
         with warnings.catch_warnings():
@@ -55,7 +55,7 @@ class WakeWord:
         n = len([k for k in m.files if k.startswith("W")])
         self._layers = [(m[f"W{i}"], m[f"b{i}"]) for i in range(n)]
         self._buf = np.zeros(0, dtype=np.float32)
-        log.info("Detector de «Pepito» cargado")
+        log.info("Detector de «Cortex» cargado")
 
     def score(self, emb: np.ndarray) -> float:
         x = (emb.reshape(-1) - self._mean) / self._std
@@ -66,7 +66,7 @@ class WakeWord:
         return float(1 / (1 + np.exp(-x[0])))
 
     def process(self, chunk: np.ndarray) -> bool:
-        """chunk: audio float32 a 16 kHz (cualquier tamaño). True si acaba de oír «Pepito»."""
+        """chunk: audio float32 a 16 kHz (cualquier tamaño). True si acaba de oír «Cortex»."""
         self._recent.append(chunk)
         self._clock += len(chunk) / 16000
         self._buf = np.concatenate([self._buf, chunk])
@@ -83,7 +83,7 @@ class WakeWord:
             self._last_fire = now
             self._fired_clip = np.concatenate(self._recent)
             self.fire_score = s
-            log.info("¡Pepito! (detector, %.2f)", s)
+            log.info("¡Cortex! (detector, %.2f)", s)
             return True
         return False
 

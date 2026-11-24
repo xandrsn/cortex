@@ -1,15 +1,15 @@
 """Oído siempre activo: detección de voz (Silero) + palabra de activación.
 
-En reposo, cada vez que alguien habla se corta ese trozo y se decide si va dirigido a Pepito con dos
+En reposo, cada vez que alguien habla se corta ese trozo y se decide si va dirigido a Cortex con dos
 pistas:
-1. Texto: se transcribe (Parakeet, ~0,3 s) y se busca «Pepito» comparando por cómo suena, no por cómo
-   se escribe («Baby too» y «Pepito» suenan igual).
-2. Sonido: si el texto no lo dice, se compara el audio con las grabaciones de «Pepito» (wakeprint).
+1. Texto: se transcribe (Parakeet, ~0,3 s) y se busca «Cortex» comparando por cómo suena, no por cómo
+   se escribe («Kortecs» y «Cortex» suenan igual).
+2. Sonido: si el texto no lo dice, se compara el audio con las grabaciones de «Cortex» (wakeprint).
 
-Si aparece entre las primeras palabras o al final, lo que venga con él es la orden («Pepito, pon
-música»); si solo se dijo «Pepito», pasa a escucha activa.
+Si aparece entre las primeras palabras o al final, lo que venga con él es la orden («Cortex, pon
+música»); si solo se dijo «Cortex», pasa a escucha activa.
 
-En escucha activa (tras el botón o un «Pepito» a secas) se graba hasta que el usuario se calla y se
+En escucha activa (tras el botón o un «Cortex» a secas) se graba hasta que el usuario se calla y se
 entrega el audio.
 """
 
@@ -22,13 +22,14 @@ import threading
 import time
 import unicodedata
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import onnxruntime as ort
 
 from .audio import Mic
-from .config import MODELS_DIR, settings
+from .config import settings
 from .stt import Transcriber, normalize
 from .wakeprint import WakePrint
 from .wakeword import WakeWord
@@ -41,8 +42,11 @@ CHUNK = 512                  # 32 ms, lo que espera Silero v5
 CHUNK_S = CHUNK / RATE
 CONTEXT = 64
 
-# Claves fonéticas que cuentan como «Pepito» con sensibilidad media (ver _phonetic)
-WAKE_KEYS = {"pepito", "papito", "pipito", "pepita", "pepitos", "pepeto", "popito"}
+# Claves fonéticas que cuentan como «Cortex» con sensibilidad media (ver _phonetic)
+WAKE_KEYS = {"cortex", "kortex", "qortex", "qoartex", "cortecs", "corteks", "kortecs", "korteks", "cortec", "kortek",
+             "cortek", "coretex", "cordex", "cortix"}
+# con sensibilidad alta tiene que acabar como suena: si no, saltaría con «corte», «cortes» o «corto»
+WAKE_SHAPE = re.compile(r"[ckgq][a-z]{2,5}(?:x|[ck]s?)")
 VAD_THRESHOLD = {1: 0.6, 2: 0.5, 3: 0.4}
 SPEC_AFTER = 0.3   # s de silencio tras los que se empieza a transcribir «por si acaso» (el corte es a los 0,7)
 
@@ -52,7 +56,7 @@ class SileroVad:
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
-        self._sess = ort.InferenceSession(str(MODELS_DIR / "vad" / "silero_vad.onnx"), opts,
+        self._sess = ort.InferenceSession(str(Path(__file__).with_name("silero_vad.onnx")), opts,
                                           providers=["CPUExecutionProvider"])
         self._sr = np.array(RATE, dtype=np.int64)
         self.reset()
@@ -74,7 +78,7 @@ def _norm(word: str) -> str:
 
 
 def _phonetic(word: str) -> str:
-    """Clave de cómo suena: «Baby too» → «papito», «Bepito» → «pepito»."""
+    """Clave de cómo suena: «Korthex» → «kortex»."""
     w = word.replace("ph", "f").replace("ee", "i").replace("ea", "i").replace("oo", "o").replace("ou", "o")
     w = w.replace("h", "").translate(str.maketrans("bvyu", "ppio"))
     return re.sub(r"(.)\1+", r"\1", w)
@@ -91,10 +95,10 @@ def _edit_distance(a: str, b: str) -> int:
 
 
 def find_wake(text: str, sensitivity: int) -> str | None:
-    """Si el texto va dirigido a Pepito devuelve la orden que lo acompaña ("" si no hay); si no, None."""
+    """Si el texto va dirigido a Cortex devuelve la orden que lo acompaña ("" si no hay); si no, None."""
     spans = [m.span() for m in re.finditer(r"[^\W_]+(?:'[^\W_]+)?", text)]
     keys = [_phonetic(_norm(text[a:b])) for a, b in spans]
-    # «pepi to», «baby too»: une parejas de palabras
+    # «cor tex», «core tex»: une parejas de palabras
     joined = [_phonetic(keys[i] + keys[i + 1]) if i + 1 < len(keys) else "" for i in range(len(keys))]
 
     def is_wake(i: int) -> int:
@@ -102,11 +106,11 @@ def find_wake(text: str, sensitivity: int) -> str | None:
         for candidate, size in ((keys[i], 1), (joined[i], 2)):
             if not candidate:
                 continue
-            if sensitivity == 1 and candidate == "pepito":
+            if sensitivity == 1 and candidate == "cortex":
                 return size
             if sensitivity == 2 and candidate in WAKE_KEYS:
                 return size
-            if sensitivity >= 3 and candidate[:1] == "p" and 5 <= len(candidate) <= 8 and \
+            if sensitivity >= 3 and WAKE_SHAPE.fullmatch(candidate) and \
                     min(_edit_distance(candidate, k) for k in WAKE_KEYS) <= 1:
                 return size
         return 0
@@ -187,7 +191,7 @@ class Listener:
                 block = None
             now = time.monotonic()
             if block is None or now - last_block > 0.3:
-                # micro silenciado (Pepito hablando) o sin datos: lo que hubiera a medias no vale
+                # micro silenciado (Cortex hablando) o sin datos: lo que hubiera a medias no vale
                 if not self.active and (self._in_speech or self._segment):
                     self._reset()
                     self.vad.reset()
@@ -283,10 +287,10 @@ class Listener:
         return dist <= self.print.threshold(sens) + 0.04, text
 
     def _detector_wake(self):
-        """El detector ha oído «Pepito»: la orden se graba ya, sin esperar a que acabe la frase."""
+        """El detector ha oído «Cortex»: la orden se graba ya, sin esperar a que acabe la frase."""
         t = time.monotonic()
         ok, text = self._verify()
-        self.last_heard = {"text": text or "Pepito", "distance": round(self.detector.fire_score, 2), "wake": ok,
+        self.last_heard = {"text": text or "Cortex", "distance": round(self.detector.fire_score, 2), "wake": ok,
                            "time": time.time()}
         if not ok:
             log.info("Detector descartado por la segunda opinión (%.2f, %r, %.2fs)", self.detector.fire_score, text,
@@ -318,12 +322,12 @@ class Listener:
                 rest = self._split_command(audio, start, end)
         self.last_heard = {"text": text, "distance": round(dist, 3), "wake": rest is not None, "time": time.time()}
         if rest is not None:
-            # solo se registra lo que va dirigido a Pepito; lo demás que se oye en casa no se guarda
-            log.info("¡Pepito! por %s (%.2fs, dist %.3f): %r → %r", how, time.monotonic() - t, dist, text, rest)
+            # solo se registra lo que va dirigido a Cortex; lo demás que se oye en casa no se guarda
+            log.info("¡Cortex! por %s (%.2fs, dist %.3f): %r → %r", how, time.monotonic() - t, dist, text, rest)
             self.on_wake(rest, lang)
 
     def _split_command(self, audio: np.ndarray, start: float, end: float) -> str:
-        """Cuando «Pepito» se reconoce por el sonido, transcribe lo que va antes o después."""
+        """Cuando «Cortex» se reconoce por el sonido, transcribe lo que va antes o después."""
         total = len(audio) / RATE
         if total - end > 0.4:
             return self.stt.transcribe(audio[int(end * RATE):], settings["notice_language"])[0]
@@ -336,10 +340,10 @@ STOP_WORDS = {"para", "calla", "callate", "basta", "stop", "espera", "vale", "ya
 
 
 class BargeIn:
-    """Mientras Pepito habla: ¿le está hablando Charlie por encima?
+    """Mientras Cortex habla: ¿le está hablando Charlie por encima?
 
-    No hay cancelación de eco, así que el micro también oye a Pepito. Cada trozo de voz se transcribe y se
-    descarta si sus palabras son las que Pepito está diciendo. Solo trabaja mientras `enabled`.
+    No hay cancelación de eco, así que el micro también oye a Cortex. Cada trozo de voz se transcribe y se
+    descarta si sus palabras son las que Cortex está diciendo. Solo trabaja mientras `enabled`.
     """
 
     def __init__(self, mic: Mic, stt: Transcriber, on_barge: Callable[[str, bool], None]):
@@ -347,9 +351,9 @@ class BargeIn:
         self.stt = stt
         self.on_barge = on_barge
         self.enabled = False
-        self._echo: collections.deque = collections.deque()   # (momento, palabras que Pepito ha dicho)
+        self._echo: collections.deque = collections.deque()   # (momento, palabras que Cortex ha dicho)
         self._lock = threading.Lock()
-        # el detector de «Pepito» también aquí: oye la palabra aunque la transcripción salga mal con su voz encima
+        # el detector de «Cortex» también aquí: oye la palabra aunque la transcripción salga mal con su voz encima
         self.detector = WakeWord()
         threading.Thread(target=self._run, daemon=True, name="barge-in").start()
 
@@ -366,14 +370,14 @@ class BargeIn:
             return set().union(*(w for t, w in self._echo if now - t <= within)) if self._echo else set()
 
     def _wake_heard(self, block: np.ndarray) -> bool:
-        """«Pepito» dicho por encima (si no es él mismo diciendo su nombre)."""
+        """«Cortex» dicho por encima (si no es él mismo diciendo su nombre)."""
         det = self.detector
         if not det.available or not det.process(block):
             return False
-        if "pepito" in self._echo_words(within=8):
-            log.info("¿Interrupción? «Pepito» del detector (%.2f) → descartada", det.fire_score)
+        if "cortex" in self._echo_words(within=8):
+            log.info("¿Interrupción? «Cortex» del detector (%.2f) → descartada", det.fire_score)
             return False
-        log.info("¿Interrupción? «Pepito» del detector (%.2f) · SÍ", det.fire_score)
+        log.info("¿Interrupción? «Cortex» del detector (%.2f) · SÍ", det.fire_score)
         return True
 
     def _run(self):
@@ -441,7 +445,7 @@ class BargeIn:
         novel = [w for w in words
                  if w not in echo and not any(SequenceMatcher(None, w, e).ratio() >= 0.75 for e in echo)]
         share = len(novel) / len(words)
-        wake = find_wake(text, int(settings["wake_sensitivity"])) is not None and "pepito" not in echo
+        wake = find_wake(text, int(settings["wake_sensitivity"])) is not None and "cortex" not in echo
         stop = len(words) <= 2 and any(w in STOP_WORDS for w in novel)
         barge = wake or stop or (len(novel) >= 3 and share >= 0.6)
         log.info("¿Interrupción? %r → nuevas %d/%d%s", text, len(novel), len(words), " · SÍ" if barge else "")

@@ -21,13 +21,13 @@ def _norm(text: str) -> str:
 def route(text: str, lang: str) -> str | None:
     t = _norm(text)
     now = datetime.now()
-    if re.fullmatch(r"(pepito )?(que hora es|me dices la hora|dime la hora|la hora)( pepito)?", t):
+    if re.fullmatch(r"(cortex )?(que hora es|me dices la hora|dime la hora|la hora)( cortex)?", t):
         return f"Son las {now:%H:%M}."
-    if re.fullmatch(r"(hey )?(pepito )?what time is it( pepito)?", t):
+    if re.fullmatch(r"(hey )?(cortex )?what time is it( cortex)?", t):
         return f"It's {now:%H:%M}."
-    if re.fullmatch(r"(pepito )?(que dia es hoy|a que estamos hoy|que fecha es hoy|que dia es)( pepito)?", t):
+    if re.fullmatch(r"(cortex )?(que dia es hoy|a que estamos hoy|que fecha es hoy|que dia es)( cortex)?", t):
         return f"Hoy es {DAYS['es'][now.weekday()]} {now.day} de {MONTHS['es'][now.month - 1]}."
-    if re.fullmatch(r"(hey )?(pepito )?(what day is it( today)?|whats the date( today)?)( pepito)?", t):
+    if re.fullmatch(r"(hey )?(cortex )?(what day is it( today)?|whats the date( today)?)( cortex)?", t):
         return f"It's {DAYS['en'][now.weekday()]}, {MONTHS['en'][now.month - 1]} {now.day}."
     return None
 
@@ -36,7 +36,7 @@ ACK_WORDS = {
     "ah", "oh", "eh", "mm", "mmm", "hmm", "vale", "ok", "okay", "okey", "oki", "gracias", "muchas", "perfecto",
     "genial", "guay", "bien", "muy", "de", "acuerdo", "entendido", "ya", "claro", "venga", "nada", "si", "no",
     "pues", "bueno", "estupendo", "fenomenal", "crack", "maquina", "thanks", "thank", "you", "cool", "got", "it",
-    "great", "alright", "nice", "sure", "right", "yeah", "yes", "fine", "pepito", "chao", "adios",
+    "great", "alright", "nice", "sure", "right", "yeah", "yes", "fine", "cortex", "chao", "adios",
 }
 
 

@@ -40,8 +40,8 @@ PATTERNS: list[tuple[str, str]] = [
 
 def parse(text: str) -> dict | None:
     t = norm(text)
-    t = re.sub(r"^(oye |hey |venga |porfa )?(pepito )?", "", t)
-    t = re.sub(r" ?(por favor|porfa|please|pepito)$", "", t).strip()
+    t = re.sub(r"^(oye |hey |venga |porfa )?(cortex )?", "", t)
+    t = re.sub(r" ?(por favor|porfa|please|cortex)$", "", t).strip()
     t = re.sub(r" (de|en|del|on|in) spotify$", "", t).strip()
     for pattern, intent in PATTERNS:
         m = re.fullmatch(pattern, t)

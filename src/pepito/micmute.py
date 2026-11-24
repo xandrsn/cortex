@@ -1,7 +1,7 @@
 """Proceso aparte que vigila si Windows tiene el micro silenciado.
 
 Se ejecuta como `python -m pepito.micmute`: escribe "1"/"0" (silenciado o no) cada 3 s y reactiva el
-micro si recibe "unmute" por stdin. También escribe "out:<altavoces conectados>" para que Pepito cambie
+micro si recibe "unmute" por stdin. También escribe "out:<altavoces conectados>" para que Cortex cambie
 de salida cuando se conecta o desconecta un altavoz Bluetooth. Va en otro proceso porque los objetos COM de pycaw, liberados
 desde otro hilo por el recolector de basura, tumban el proceso que los usa.
 """

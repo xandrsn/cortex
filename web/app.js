@@ -4,7 +4,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const STATE_TEXT = {
-  idle: "Di «Pepito» o pulsa",
+  idle: "Di «Cortex» o pulsa",
   listening: "Te escucho…",
   transcribing: "Un momento…",
   thinking: "Pensando…",
@@ -61,8 +61,8 @@ const GESTURES = {
 };
 const ACTIONS = {
   none: "Nada", next: "Siguiente canción", previous: "Canción anterior", toggle: "Pausar / seguir",
-  volume_up: "Subir volumen", volume_down: "Bajar volumen", pepito: "Escuchar (como «Pepito»)",
-  stop: "Cortar a Pepito (para todo)", quiet: "Callar a Pepito (sigue con lo suyo)", ambient: "Modo reposo", wake_toggle: "Pausar/activar «Pepito»",
+  volume_up: "Subir volumen", volume_down: "Bajar volumen", pepito: "Escuchar (como «Cortex»)",
+  stop: "Cortar al asistente (para todo)", quiet: "Callar al asistente (sigue con lo suyo)", ambient: "Modo reposo", wake_toggle: "Pausar/activar «Cortex»",
   new_chat: "Conversación nueva", theme: "Cambiar claro/oscuro",
 };
 const ACCENTS = ["#0b8f55", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#111827"];
@@ -72,14 +72,33 @@ let grid;
 let layout = [];
 let streamingEl = null;
 let settings = {};
+let quitting = false;
 let lastActivity = Date.now();
 let vision = {};
 
 // ---------- panel y widgets ----------
+/** Reparte las tarjetas elegidas en el tablero de 12 × 12; sin ninguna válida, la distribución de serie. */
+function layoutFor(ids) {
+  const items = structuredClone(DEFAULT_LAYOUT);
+  const on = items.filter(w => Array.isArray(ids) && ids.includes(w.id));
+  if (!on.length) return items;
+  const rows = Math.ceil(on.length / 4);   // hasta 16 tarjetas: 4 filas de 4
+  for (const w of items) w.hidden = !on.includes(w);
+  for (let y = 0, i = 0; y < rows; y++) {
+    const n = Math.ceil((on.length - i) / (rows - y));
+    for (let x = 0; x < n; x++) Object.assign(on[i++], { x: x * 12 / n, y: y * 12 / rows, w: 12 / n, h: 12 / rows });
+  }
+  return items;
+}
+
 async function loadLayout() {
   let saved = [];
   try { saved = await (await fetch("/api/layout")).json(); } catch {}
-  if (!Array.isArray(saved) || !saved.length) return structuredClone(DEFAULT_LAYOUT);
+  if (!Array.isArray(saved) || !saved.length) {
+    let chosen = [];   // las tarjetas elegidas en el instalador
+    try { chosen = (await (await fetch("/api/settings")).json()).settings.setup_widgets; } catch {}
+    return layoutFor(chosen);
+  }
   const known = new Set(saved.map(w => w.id));
   for (const def of DEFAULT_LAYOUT) if (!known.has(def.id)) saved.push({ ...def, hidden: true });
   // tamaños que falten (distribuciones viejas) salen de los de fábrica
@@ -372,7 +391,7 @@ function connect() {
   ws.onmessage = e => handle(JSON.parse(e.data));
   ws.onclose = () => {
     setState("idle");
-    setSub("Sin conexión con Pepito, reintentando…");
+    setSub(quitting ? "Cortex está cerrado" : "Sin conexión con Cortex, reintentando…");
     setTimeout(connect, 1500);
   };
 }
@@ -503,7 +522,7 @@ function showEmptyHint() {
   if (box && !box.children.length) {
     const p = document.createElement("p");
     p.className = "empty";
-    p.textContent = "Aquí verás lo que hablas con Pepito.";
+    p.textContent = "Aquí verás lo que hablas con el asistente. Mientras espera «Cortex», el micro está siempre encendido y puede activarse por error. Ese audio se procesa en este equipo; lo que le dices o escribes se envía a Claude, y las respuestas se leen con la voz en línea de Microsoft Edge.";
     box.append(p);
   }
 }
@@ -519,7 +538,7 @@ function renderStatus(s) {
   wake.classList.toggle("on", s.wake);
   wake.classList.toggle("off", !s.wake);
   wake.querySelector("use").setAttribute("href", s.wake ? "#i-ear" : "#i-ear-off");
-  wake.title = s.wake ? "Escuchando «Pepito» (pulsa para pausar)" : "No escucha «Pepito» (pulsa para activar)";
+  wake.title = s.wake ? "Escuchando «Cortex» (pulsa para pausar)" : "No escucha «Cortex» (pulsa para activar)";
 
   renderWake(s);
   const list = $("#statusList");
@@ -530,7 +549,7 @@ function renderStatus(s) {
     ["Micro", s.mic.ok, s.mic.name || "sin micro"],
     ["Altavoz", s.speaker.ok, s.speaker.name || "sin altavoz"],
     ["Claude", s.claude.ok, s.claude.ok === false ? "con problemas" : modelName(s.claude.model)],
-    ["«Pepito»", s.wake, s.wake ? (s.wake_method === "detector" ? "escuchando (detector)" : "escuchando") : "en pausa"],
+    ["«Cortex»", s.wake, s.wake ? (s.wake_method === "detector" ? "escuchando (detector)" : "escuchando") : "en pausa"],
   ];
   if (vision.enabled !== undefined) rows.push(["Cámara", vision.enabled ? vision.camera_ok : null,
     !vision.enabled ? "apagada" : vision.camera_ok ? (vision.engaged ? "te está viendo" : "vigilando") : "sin cámara"]);
@@ -571,7 +590,7 @@ function renderEnroll(m) {
     $("#enrollInfo").textContent = m.message || "";
     setSub(m.message || "");
   } else {
-    const text = `Di «Pepito» (${m.step} de ${m.total})`;
+    const text = `Di «Cortex» (${m.step} de ${m.total})`;
     $("#enrollInfo").textContent = text;
     setSub(text);
   }
@@ -581,7 +600,7 @@ function renderWake(s) {
   if (!enrolling) {
     $("#enrollInfo").textContent = s.wake_samples
       ? `Tengo ${s.wake_samples} grabaciones tuyas. Puedes grabar más si aún falla.`
-      : "Graba «Pepito» unas cuantas veces para que te reconozca mejor.";
+      : "Graba «Cortex» unas cuantas veces para que te reconozca mejor.";
   }
   const h = s.last_heard || {};
   const box = $("#lastHeard");
@@ -608,11 +627,11 @@ function renderSpotify(s) {
   $("#spOn").hidden = !s.connected;
   $("#spOffText").textContent = s.client_id
     ? "Conecta tu cuenta para poner música por voz."
-    : "Falta configurar la app de Spotify (SPOTIFY_CLIENT_ID).";
+    : "Falta el Client ID de Spotify: Ajustes → Cerebro → Asistente de configuración.";
   $("#spConnect").hidden = !s.client_id;
   $("#spDevice").textContent = s.device || "";
   $("#spTitle").textContent = s.title || "Nada sonando";
-  $("#spArtist").textContent = s.artist || "Di «Pepito, pon la playlist…»";
+  $("#spArtist").textContent = s.artist || "Di «Cortex, pon la playlist…»";
   const cover = $("#spCover");
   cover.style.backgroundImage = s.image ? `url("${s.image}")` : "";
   cover.classList.toggle("has-img", !!s.image);
@@ -635,7 +654,7 @@ function renderSpotify(s) {
 function renderSpotifySettings() {
   const s = spotify;
   const info = $("#spSettingsInfo");
-  info.textContent = !s.client_id ? "Falta SPOTIFY_CLIENT_ID en C:la carpeta del programa\\.env"
+  info.textContent = !s.client_id ? "Falta el Client ID de Spotify: Ajustes → Cerebro → Asistente de configuración"
     : s.connected ? "Conectado con tu cuenta." : "Sin conectar.";
   $("#spSettingsConnect").hidden = s.connected || !s.client_id;
   $("#spLogout").hidden = !s.connected;
@@ -920,7 +939,7 @@ function renderTimers() {
   const now = (Date.now() + timerOffset) / 1000;
   const live = timerList.filter(t => t.end > now - 1);
   if (!live.length) {
-    if (list.dataset.empty !== "1") list.innerHTML = `<li class="r-empty">Di «Pepito, temporizador de 10 minutos» o pulsa uno.</li>`;
+    if (list.dataset.empty !== "1") list.innerHTML = `<li class="r-empty">Di «Cortex, temporizador de 10 minutos» o pulsa uno.</li>`;
     list.dataset.empty = "1";
     return;
   }
@@ -990,7 +1009,7 @@ async function openMail(id) {
   try {
     const res = await fetch(`/api/mail/open?id=${encodeURIComponent(id)}`);
     r = res.ok ? await res.json() : { error: await res.text() };
-  } catch { r = { error: "Sin conexión con Pepito" }; }
+  } catch { r = { error: "Sin conexión con Cortex" }; }
   if (mailOpen !== id) return;
   if (r.error) { $("#mrSubject").textContent = r.error; return; }
   $("#mrSubject").textContent = r.subject || "(sin asunto)";
@@ -1013,13 +1032,11 @@ function renderMailLogin(m) {
     ${slots.map(s => `<form class="ml-row" data-slot="${s.slot}" autocomplete="off">
       <span class="ml-label">${s.label === "principal" ? "Principal" : "Secundaria"} ${s.ok ? "✅" : ""}</span>
       <input class="input" name="user" value="${esc(s.user || MAIL_DEFAULT[s.slot] || "")}" placeholder="correo@gmail.com">
-      <button type="button" class="text-btn ml-open">1 · Crear contraseña</button>
+      <a class="text-btn" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">1 · Crear contraseña</a>
       <input class="input" name="password" type="password" placeholder="${s.ok ? "Conectada · pega otra para cambiarla" : "2 · Pega las 16 letras"}">
       <button class="text-btn ml-go">Conectar</button>
       <small class="ml-msg"></small></form>`).join("")}
     ${m.configured ? `<button type="button" class="text-btn ml-done">Listo</button>` : ""}</li>`);
-  document.querySelectorAll("#mailList .ml-open").forEach(b => b.onclick = () => fetch("/api/mail/apppasswords", { method: "POST",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: b.form.user.value }) }));
   $("#mailList .ml-done")?.addEventListener("click", () => { mailLogin = false; $("#mailList").replaceChildren(); renderMail(last.mail); });
   document.querySelectorAll("#mailList .ml-row").forEach(f => f.onsubmit = async e => {
     e.preventDefault();
@@ -1029,7 +1046,7 @@ function renderMailLogin(m) {
     try {
       r = await (await fetch("/api/mail/login", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slot: f.dataset.slot, user: f.user.value, password: f.password.value }) })).json();
-    } catch { r = { ok: false, error: "Pepito no responde." }; }
+    } catch { r = { ok: false, error: "Cortex no responde." }; }
     msg.className = "ml-msg " + (r.ok ? "ok" : "bad");
     msg.textContent = r.ok ? "Conectada ✅" : r.error;
     if (r.ok && !(r.slots || []).some(s => !s.ok)) mailLogin = false;   // las dos bien: al siguiente refresco sale el correo
@@ -1046,7 +1063,7 @@ async function reloadBtn(b, url, done) {
   finally { b.classList.remove("spin"); }
 }
 
-// ---------- WhatsApp (solo leer) ----------
+// ---------- WhatsApp ----------
 async function loadWhatsApp() {
   try { last.whatsapp = await (await fetch("/api/whatsapp")).json(); renderWhatsApp(last.whatsapp); } catch {}
 }
@@ -1059,7 +1076,7 @@ function renderWhatsApp(m) {
   if (waOpen) { refreshWaChat(); return; }
   const state = $("#waState");
   if (!m.available) {
-    setHTML("#waList", `<li class="setup">Falta el puente de WhatsApp (C:la carpeta del programa\\whatsapp-mcp).</li>`);
+    setHTML("#waList", `<li class="setup">Falta el puente de WhatsApp. Reinstala Cortex marcando WhatsApp.</li>`);
     state.textContent = "";
     return;
   }
@@ -1075,7 +1092,7 @@ function renderWhatsApp(m) {
   waQr = "";
   if (m.state !== "connected" && !m.chats.length) {
     state.textContent = "";
-    setHTML("#waList", `<li class="setup">${m.state === "error" ? "El puente se ha caído, lo reintento…" : "Conectando con WhatsApp…"}</li>`);
+    setHTML("#waList", `<li class="setup">${m.state === "off" ? "Sin vincular: Ajustes → Cerebro → Asistente de configuración." : m.state === "error" ? "El puente se ha caído, lo reintento…" : "Conectando con WhatsApp…"}</li>`);
     return;
   }
   state.textContent = m.state === "connected" ? "" : "Sin conexión";
@@ -1121,9 +1138,22 @@ async function openWaChat(jid) {
   setHTML("#waList", `<li class="wa-chat">
       <div class="wa-chat-head"><button class="icon-btn" id="waBack" title="Volver">‹</button>
         <b id="waName"></b><span id="waBellBox"></span>
-        <input class="input" id="waMote" placeholder="Mote (cómo lo dice Pepito)" autocomplete="off">
+        <input class="input" id="waMote" placeholder="Mote (cómo lo dice Cortex)" autocomplete="off">
         <button class="text-btn" id="waSum">Resumir</button></div>
-      <div class="wa-msgs" id="waMsgs"></div></li>`);
+      <div class="wa-msgs" id="waMsgs"></div>
+      ${settings.whatsapp_mode === "write" ? `<form class="with-btn" id="waSend"><input class="input" name="text" maxlength="4000" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" autocomplete="off"><button class="btn primary">Enviar</button></form>` : ""}</li>`);
+  if ($("#waSend")) $("#waSend").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, text = f.text.value.trim(), b = f.querySelector("button");
+    if (!text || b.disabled) return;
+    b.disabled = true;   // un doble Enter no lo manda dos veces
+    let r = {};
+    try { r = await (await fetch("/api/whatsapp/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jid, text }) })).json(); } catch {}
+    b.disabled = false;
+    if (!r.ok) { toast(r.error || "No sé si ha salido: míralo en el móvil."); return; }
+    f.text.value = "";
+    if (waOpen === jid) refreshWaChat(true);
+  };
   $("#waBack").onclick = () => { waOpen = null; renderWhatsApp(last.whatsapp); };
   $("#waSum").onclick = () => send({ action: "text", text: `Resúmeme lo último del chat de WhatsApp «${$("#waName").dataset.real}».` });
   $("#waMote").onkeydown = async e => {
@@ -1132,7 +1162,7 @@ async function openWaChat(jid) {
     await fetch("/api/whatsapp/mote", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: $("#waName").dataset.real, mote: e.target.value }) });
     e.target.blur();
-    toast(e.target.value.trim() ? `Pepito lo llamará «${e.target.value.trim()}»` : "Mote quitado");
+    toast(e.target.value.trim() ? `Cortex lo llamará «${e.target.value.trim()}»` : "Mote quitado");
   };
   await refreshWaChat(true);
 }
@@ -1231,7 +1261,7 @@ function renderCompra(items) {
   if (!$("#compraList")) return;
   items = items || [];
   setHTML("#compraList", items.map((it, i) => `<li data-i="${i}" class="${it.done ? "done" : ""}"><i></i><span>${esc(it.text)}</span></li>`).join("")
-    || `<li class="r-empty" style="cursor:default">Vacía. Di «Pepito, añade leche a la lista».</li>`);
+    || `<li class="r-empty" style="cursor:default">Vacía. Di «Cortex, añade leche a la lista».</li>`);
   $("#compraClear").hidden = !items.some(i => i.done);
 }
 
@@ -1256,7 +1286,7 @@ function renderAvisos(items) {
       <span class="when">${esc(a.di)}</span>
       <div><div>${esc(a.texto)}</div>${a.repetir ? `<small>${esc(REPEAT_TEXT[a.repetir] || a.repetir)}</small>` : ""}</div>
       <button class="icon-btn small del" data-id="${esc(a.id)}" title="Borrar"><svg><use href="#i-trash"/></svg></button>
-    </li>`).join("") : `<li class="empty">Sin avisos. Di «Pepito, recuérdame…»</li>`;
+    </li>`).join("") : `<li class="empty">Sin avisos. Di «Cortex, recuérdame…»</li>`;
   for (const b of $$(".del", list)) {
     b.addEventListener("click", async () => {
       // borrar pide confirmación: primer toque arma, segundo borra
@@ -1669,7 +1699,7 @@ function fillSettings({ settings: s, devices, options }) {
   f.tts_rate.value = s.tts_rate;
   $("#rateOut").textContent = `${s.tts_rate > 0 ? "+" : ""}${s.tts_rate}%`;
   for (const name of ["session_idle_minutes", "followup_seconds", "ambient_minutes"]) if (f[name]) f[name].value = s[name] ?? 0;
-  for (const name of ["wake_enabled", "gestures_enabled", "gestures_require_look"]) if (f[name]) f[name].checked = !!s[name];
+  for (const name of ["wake_enabled", "gestures_enabled", "gestures_require_look", "window_gestures"]) if (f[name]) f[name].checked = !!s[name];
   for (const seg of f.querySelectorAll(".segmented")) {
     for (const b of seg.children) b.classList.toggle("sel", String(s[seg.dataset.name]) === b.dataset.value);
   }
@@ -1933,7 +1963,7 @@ async function init() {
     renderQuiet(r.quiet);
   });
   setInterval(renderTimers, 1000);
-  setInterval(loadCompra, 5 * 60_000);    // por si Pepito (Claude) la cambia editando el archivo
+  setInterval(loadCompra, 5 * 60_000);    // por si Cortex (Claude) la cambia editando el archivo
   const editHash = location.hash.match(/^#edit=(\w+)/);   // p. ej. /#edit=tareas abre el editor
   if (editHash) openEditor(editHash[1]);
   loadWeather();

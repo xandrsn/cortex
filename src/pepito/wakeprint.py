@@ -1,4 +1,4 @@
-"""Huella acústica de «Pepito»: compara lo que se oye con grabaciones de la propia palabra.
+"""Huella acústica de «Cortex»: compara lo que se oye con grabaciones de la propia palabra.
 
 Usa los modelos de openWakeWord (espectrograma + embeddings de voz de Google, pensados para palabras de
 activación con pocos ejemplos) y DTW de subsecuencia: busca el trozo del audio que más se parece a
@@ -18,8 +18,8 @@ from .config import MODELS_DIR, ROOT
 
 log = logging.getLogger("wakeprint")
 
-SAMPLES_DIR = ROOT / "wake"
-DEFAULTS_DIR = MODELS_DIR / "wake_default"
+SAMPLES_DIR = ROOT / "wake_cortex"
+DEFAULTS_DIR = MODELS_DIR / "wake_cortex_default"
 RATE = 16000
 PAD = 4000                 # 0,25 s de silencio a cada lado (el modelo mira ventanas de 0,775 s)
 FRAME_S = 0.08
@@ -82,7 +82,7 @@ class WakePrint:
 
             async def make(voice: str, rate: str) -> np.ndarray:
                 mp3 = b""
-                async for chunk in edge_tts.Communicate("Pepito", voice, rate=rate).stream():
+                async for chunk in edge_tts.Communicate("Cortex", voice, rate=rate).stream():
                     if chunk["type"] == "audio":
                         mp3 += chunk["data"]
                 d = miniaudio.decode(mp3, output_format=miniaudio.SampleFormat.FLOAT32, nchannels=1, sample_rate=RATE)
@@ -90,7 +90,7 @@ class WakePrint:
 
             for i, (voice, rate) in enumerate(DEFAULT_VOICES):
                 _write_wav(DEFAULTS_DIR / f"{i}.wav", asyncio.run(make(voice, rate)))
-            log.info("Plantillas base de «Pepito» generadas")
+            log.info("Plantillas base de «Cortex» generadas")
         except Exception as e:
             log.warning("No pude generar las plantillas base: %s", e)
 
@@ -106,7 +106,7 @@ class WakePrint:
         from .stt import normalize
         clip = normalize(trim(audio))
         n = len(list(SAMPLES_DIR.glob("*.wav")))
-        _write_wav(SAMPLES_DIR / f"pepito_{n + 1:02d}.wav", clip)
+        _write_wav(SAMPLES_DIR / f"cortex_{n + 1:02d}.wav", clip)
         self.reload()
         return self.user_samples
 
@@ -146,7 +146,7 @@ class WakePrint:
         return float(acc[n, end] / n), int(start[n, end]), end - 1
 
     def match(self, audio: np.ndarray) -> tuple[float, float, float]:
-        """(distancia, inicio s, fin s) del trozo que más se parece a «Pepito»."""
+        """(distancia, inicio s, fin s) del trozo que más se parece a «Cortex»."""
         with self._lock:
             templates = list(self._templates)
         if not templates:

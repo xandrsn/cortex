@@ -53,7 +53,7 @@ def search(query: str, limit: int = 8) -> list[dict]:
         if len(results) >= limit:
             break
     if not results and "anomaly" in r.text.lower():
-        raise RuntimeError("El buscador ha bloqueado la búsqueda un rato; pregúntaselo a Pepito")
+        raise RuntimeError("El buscador ha bloqueado la búsqueda un rato; pregúntaselo a Cortex")
     _cache[query.lower()] = (time.time(), results)
     if len(_cache) > 50:
         _cache.pop(next(iter(_cache)))

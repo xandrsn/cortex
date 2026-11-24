@@ -17,8 +17,8 @@ from .datos import DAYS_ES, MONTHS_ES, folder
 
 log = logging.getLogger("avisos")
 
-HEADER = ("# Avisos programados. Solo los que Charlie programe o pida programar: Pepito no se inventa ninguno.\n"
-          "# Los gestiona Pepito (también desde el panel). cuando: AAAA-MM-DD HH:MM · repetir: diario, laborables,\n"
+HEADER = ("# Avisos programados. Solo los que Charlie programe o pida programar: Cortex no se inventa ninguno.\n"
+          "# Los gestiona Cortex (también desde el panel). cuando: AAAA-MM-DD HH:MM · repetir: diario, laborables,\n"
           "# findes, semanal, mensual o vacío.\n\n")
 REPEATS = {"", "diario", "laborables", "findes", "semanal", "mensual"}
 TAG = re.compile(r"\[\[\s*aviso\s*:\s*(.+?)\]\]", re.I | re.S)

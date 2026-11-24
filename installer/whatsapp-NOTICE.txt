@@ -1,0 +1,5 @@
+WhatsApp bridge for Cortex (separate program, optional)
+
+Based on whatsapp-mcp by Luke Harries (MIT, see LICENSE). Source: main.go, go.mod and go.sum in this folder.
+Built with whatsmeow (MPL-2.0) and go.mau.fi/libsignal (GPL-3.0); other dependencies are listed in go.mod.
+It is not affiliated with or endorsed by WhatsApp. It links to your account as a companion device.

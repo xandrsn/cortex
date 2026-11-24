@@ -21,7 +21,7 @@ log = logging.getLogger("stt")
 
 MODELS = ["parakeet", "whisper-small", "whisper-base"]
 LANGS = ("es",)   # solo español: el multidioma no era fiable
-WHISPER_VOCAB = " Pepito, Betis, Spotify, playlist, gym."
+WHISPER_VOCAB = " Cortex, Betis, Spotify, playlist, gym."
 
 # Lo que más suele oír mal, corregido a mano
 FIXES = [
@@ -88,7 +88,7 @@ def suspicious(text: str, seconds: float) -> bool:
 
 
 def save_clip(audio: np.ndarray, text: str) -> None:
-    """Guarda en local las últimas órdenes dichas a Pepito, para poder revisar qué entiende mal."""
+    """Guarda en local las últimas órdenes dichas a Cortex, para poder revisar qué entiende mal."""
     try:
         CLIPS_DIR.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -121,7 +121,8 @@ class Transcriber:
             log.info("Cargando %s", name)
             if name == "parakeet":
                 import onnx_asr
-                self._model = onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v3", MODELS_DIR / "parakeet",
+                local = MODELS_DIR / "parakeet"   # sin copia local se descarga a la caché de Hugging Face (y se reanuda)
+                self._model = onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v3", local if local.exists() else None,
                                                   quantization="int8")
             else:
                 from faster_whisper import WhisperModel

@@ -69,16 +69,16 @@
     <div class="voice" id="voice">
       <div class="voice-pill" id="voicePill">
         <div class="bars" id="bars"><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="voice-text"><b id="stateLabel">Di «Pepito» o pulsa</b><span id="stateSub"></span></div>
+        <div class="voice-text"><b id="stateLabel">Di «Cortex» o pulsa</b><span id="stateSub"></span></div>
       </div>
-      <button class="talk" id="talkBtn" aria-label="Hablar con Pepito" title="Hablar con Pepito (espacio)">
+      <button class="talk" id="talkBtn" aria-label="Hablar con el asistente de voz" title="Hablar con el asistente de voz (espacio)">
         <svg class="ico-mic"><use href="#i-mic"/></svg>
         <svg class="ico-stop"><use href="#i-stop"/></svg>
       </button>
     </div>
     <div class="tools">
       <button class="icon-btn" id="cameraBtn" title="Ver cámara y gestos"><svg><use href="#i-camera"/></svg></button>
-      <button class="icon-btn" id="wakeBtn" title="Escuchar «Pepito»"><svg><use href="#i-ear"/></svg></button>
+      <button class="icon-btn" id="wakeBtn" title="Escuchar «Cortex»"><svg><use href="#i-ear"/></svg></button>
       <button class="icon-btn" id="editBtn" title="Personalizar panel"><svg><use href="#i-layout"/></svg></button>
       <button class="icon-btn" id="fullBtn" title="Pantalla completa"><svg><use href="#i-expand"/></svg></button>
       <button class="icon-btn" id="settingsBtn" title="Ajustes"><svg><use href="#i-gear"/></svg></button>
@@ -121,7 +121,7 @@
     </div>
     <div class="messages" id="messages"></div>
     <form class="composer" id="composer">
-      <input id="textInput" autocomplete="off" placeholder="Escríbele a Pepito…">
+      <input id="textInput" autocomplete="off" placeholder="Escríbele al asistente…">
       <button type="submit" class="send" aria-label="Enviar"><svg><use href="#i-send"/></svg></button>
     </form>
   </section>
@@ -146,7 +146,7 @@
       <div class="sp-cover" id="spCover"><svg><use href="#i-note"/></svg></div>
       <div class="pl-meta">
         <div class="sp-title" id="spTitle">Nada sonando</div>
-        <div class="sp-artist"><span id="spArtist">Di «Pepito, pon la playlist…»</span><span class="sp-device" id="spDevice"></span></div>
+        <div class="sp-artist"><span id="spArtist">Di «Cortex, pon la playlist…»</span><span class="sp-device" id="spDevice"></span></div>
         <div class="sp-progress"><span id="spProgress"></span></div>
       </div>
       <div class="pl-ctrl">
@@ -242,7 +242,7 @@
       </div>
     </div>
     <div class="v-screen" id="videoScreen" hidden></div>
-    <ul class="results yt scroll" id="searchResults"><li class="r-empty">Busca algo o di «Pepito, pon en YouTube…». Sin anuncios.</li></ul>
+    <ul class="results yt scroll" id="searchResults"><li class="r-empty">Busca algo o di «Cortex, pon en YouTube…». Sin anuncios.</li></ul>
     <div class="s-foot">
       <div class="v-apps" id="videoApps"></div>
     </div>
@@ -324,7 +324,7 @@
       <button class="icon-btn" data-close aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
     </div>
     <p class="note">Cambia el texto y guarda. Mantén los espacios del principio de cada línea: marcan qué va dentro de qué.
-      Si algo no cuadra, no se guarda y te dice dónde. También puedes pedírselo a Pepito: «Pepito, marca como hecha…».</p>
+      Si algo no cuadra, no se guarda y te dice dónde. También puedes pedírselo a Cortex: «Cortex, marca como hecha…».</p>
     <textarea id="editText" spellcheck="false"></textarea>
     <div class="edit-foot">
       <span class="edit-error" id="editError"></span>
@@ -386,7 +386,8 @@
   <form id="settingsForm" class="settings">
     <div class="tab" data-tab="voz">
       <section>
-        <h3>Palabra «Pepito»</h3>
+        <h3>Asistente de voz · palabra «Cortex»</h3>
+        <p class="setup-demo">Mientras espera «Cortex», el micro está siempre encendido y puede activarse por error. Ese audio se procesa en este equipo; lo que le dices o escribes se envía a Claude, y las respuestas se leen con la voz en línea de Microsoft Edge.</p>
         <label class="row">Escuchar siempre <input type="checkbox" name="wake_enabled" class="switch"></label>
         <div class="field">Sensibilidad
           <div class="segmented" data-name="wake_sensitivity">
@@ -397,9 +398,9 @@
           <small>Baja si se activa sola; alta si no te oye.</small>
         </div>
         <div class="field">Tu voz
-          <small id="enrollInfo">Graba «Pepito» unas cuantas veces para que te reconozca mejor.</small>
+          <small id="enrollInfo">Graba «Cortex» unas cuantas veces para que te reconozca mejor.</small>
           <span class="with-btn">
-            <button type="button" class="btn" id="enrollBtn">Grabar mis «Pepito»</button>
+            <button type="button" class="btn" id="enrollBtn">Grabar mis «Cortex»</button>
             <button type="button" class="text-btn" id="enrollClear">Borrar</button>
           </span>
         </div>
@@ -427,7 +428,7 @@
             <option value="piper">Solo Piper (local)</option>
           </select>
         </label>
-        <label class="field">Segundos para responder sin decir «Pepito»
+        <label class="field">Segundos para responder sin decir «Cortex»
           <input type="number" name="followup_seconds" min="0" max="15">
         </label>
       </section>
@@ -462,13 +463,13 @@
     <div class="tab" data-tab="video" hidden>
       <section>
         <h3>Webs de vídeo</h3>
-        <small class="hint">Di «Pepito, busca X en &lt;web&gt;». Para guardar una con nombre: «guarda esta web como X».</small>
+        <small class="hint">Di «Cortex, busca X en &lt;web&gt;». Para guardar una con nombre: «guarda esta web como X».</small>
         <ul class="acc-list" id="webList"></ul>
       </section>
       <section>
         <h3>Cuentas para iniciar sesión solo</h3>
         <small class="hint">La contraseña se guarda cifrada en el Administrador de credenciales de Windows (nunca en Drive).
-          Pepito la usa cuando esa web pide iniciar sesión.</small>
+          Cortex la usa cuando esa web pide iniciar sesión.</small>
         <ul class="acc-list" id="accList"></ul>
         <div class="acc-form">
           <input class="input" id="accSite" placeholder="Web (p. ej. netflix.com)" autocomplete="off">
@@ -526,6 +527,22 @@
         </label>
         <label class="field">Transcripción <select name="stt_model"></select></label>
       </section>
+      <section>
+        <h3>WhatsApp</h3>
+        <div class="field">Qué puede hacer
+          <div class="segmented" data-name="whatsapp_mode">
+            <button type="button" data-value="read">Solo leer</button>
+            <button type="button" data-value="write">Leer y escribir</button>
+          </div>
+          <small>Usa un cliente no oficial (whatsmeow) vinculado como dispositivo: WhatsApp podría limitar o bloquear la cuenta, y más si envías mensajes. El asistente nunca envía; solo tú, desde un chat abierto.</small>
+        </div>
+      </section>
+      <section>
+        <h3>Cortex</h3>
+        <label class="row">Mover ventanas con gestos (webcam; al reiniciar) <input type="checkbox" name="window_gestures" class="switch"></label>
+        <button type="button" class="btn" id="openSetup">Asistente de configuración</button>
+        <button type="button" class="text-btn" id="quitApp">Cerrar Cortex</button>
+      </section>
     </div>
   </form>
 </aside>
@@ -534,5 +551,6 @@
 
 <script src="/static/vendor/gridstack-all.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/setup.js"></script>
 </body>
 </html>

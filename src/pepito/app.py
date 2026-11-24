@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -20,10 +21,10 @@ from . import audio, avisos, bank, compra, datos, music, search, timers, tts, vi
 from .video import VideoPlayer
 from .webplayer import WebPlayer
 from .devices import Devices
-from .mail import Mail
+from .mail import Mail, save_env
 from .whatsapp import WhatsApp
 from .brain import one_shot
-from .brain import Brain, BrainError
+from .brain import Brain, BrainError, claude_login, claude_status
 from .config import MODELS_DIR, ROOT, WEB_DIR, settings
 
 WHO = settings["user_name"] or "el usuario"   # nombre configurable en config.yaml (user_name)
@@ -54,8 +55,8 @@ SENTENCE_END = re.compile(r"(.+?[.!?…:;](?=\s)|.+?\n)", re.S)
 LAYOUT_FILE = ROOT / "layout.json"
 
 
-# el detector salta antes de que acabe la palabra: «…to, pon música» o «Pepito, pon música» → «pon música»
-WAKE_TAIL = re.compile(r"^\s*(?:(?:pe|pa|be)?pi)?to\b[\s,.;:!?]*", re.I)
+# el detector salta antes de que acabe la palabra: «…tex, pon música» o «Cortex, pon música» → «pon música»
+WAKE_TAIL = re.compile(r"^\s*(?:[ck][oó]r)?te(?:x|[ck]s)\b[\s,.;:!?]*", re.I)
 
 
 def strip_wake(text: str) -> str:
@@ -181,7 +182,7 @@ def local_tools(text: str) -> str | None:
 
 
 # preguntas sobre la cuenta del banco: se le pasan a Claude los datos de Revolut (solo lectura)
-MORNING_RE = re.compile(r"resumen (matinal|de la ma[ñn]ana|del d[ií]a)|buenos d[ií]as,? pepito", re.I)
+MORNING_RE = re.compile(r"resumen (matinal|de la ma[ñn]ana|del d[ií]a)|buenos d[ií]as,? cortex", re.I)
 BANK_RE = re.compile(r"revolut|saldo|movimientos|en el banco|en la cuenta|he gastado|mis gastos|presupuesto|"
                      r"c[oó]mo voy (de|con el) dinero|deber[ií]a tener",
                      re.I)
@@ -205,9 +206,9 @@ GESTURE_NAMES = {
 }
 ACTION_NAMES = {
     "next": "siguiente canción", "previous": "canción anterior", "toggle": "pausar / seguir la música",
-    "volume_up": "subir volumen", "volume_down": "bajar volumen", "pepito": "ponerse a escuchar (como decir «Pepito»)",
-    "stop": "cortar a Pepito (para todo)", "quiet": "callar a Pepito (deja de hablar pero sigue con la tarea)",
-    "ambient": "modo reposo", "wake_toggle": "pausar/activar la palabra «Pepito»",
+    "volume_up": "subir volumen", "volume_down": "bajar volumen", "pepito": "ponerse a escuchar (como decir «Cortex»)",
+    "stop": "cortar al asistente (para todo)", "quiet": "callar al asistente (deja de hablar pero sigue con la tarea)",
+    "ambient": "modo reposo", "wake_toggle": "pausar/activar la palabra «Cortex»",
     "new_chat": "conversación nueva", "theme": "cambiar tema claro/oscuro",
 }
 
@@ -246,7 +247,7 @@ def watch_context() -> str:
     return ("[Servicios de vídeo activados (dato del sistema): " + "; ".join(f"{s['name']} ({', '.join(s['domains'])})"
             for s in on) + ". Para poner algo escribe al final [[ver: servicio | qué]] (p. ej. [[ver: RTVE | último "
             "telediario]], [[ver: RTVE | La Revuelta de anoche]], [[ver: RTVE | La 1 en directo]], [[ver: Pluto TV | canal "
-            "de películas de acción]], [[ver: Atresplayer | El Hormiguero de anoche]]): Pepito lo busca en la propia web, "
+            "de películas de acción]], [[ver: Atresplayer | El Hormiguero de anoche]]): Cortex lo busca en la propia web, "
             "lo abre y le da al play. Solo si tienes la URL exacta de la página del vídeo usa [[ver: URL]]; no pongas la "
             "portada. Los directos de RTVE piden cuenta; canales temáticos sin cuenta: Pluto TV. Netflix, Prime Video y "
             "Disney+: busca el título y pone el primer resultado. Cualquier otra web de vídeo también vale: "
@@ -364,7 +365,7 @@ class Pepito:
         self._turn_t = 0.0    # cuándo empezó el turno (0 = ya ha hablado)
         self._gen = 0         # cada turno tiene su número: el audio de un turno interrumpido se descarta
         self._quiet_gen = -1   # turno al que se ha mandado callar (gesto de silencio): sigue, pero sin voz
-        self._enroll_left = 0  # muestras de «Pepito» que faltan por grabar
+        self._enroll_left = 0  # muestras de «Cortex» que faltan por grabar
         self.mic_mute = audio.WindowsMicMute()
         self.spotify = Spotify(settings["ui_port"])
         self._duck_lock = asyncio.Lock()
@@ -380,13 +381,8 @@ class Pepito:
         timers.load()   # los temporizadores sobreviven a un reinicio
         self.devices = Devices()
         self.open_devices()
-        await asyncio.gather(
-            asyncio.to_thread(self.stt.load, settings["stt_model"]),
-            asyncio.to_thread(self.brain.start),
-        )
-        self.listener = Listener(self.mic, self.stt, self._threadsafe(self._on_wake),
-                                 self._threadsafe(self._on_command), self._threadsafe(self._on_timeout))
-        self.barge = BargeIn(self.mic, self.stt, self._threadsafe(self._on_barge))
+        self.spawn(self._start_brain())
+        self.spawn(self._start_ears())   # en segundo plano: la primera vez descarga el modelo y el panel no espera
         self.spawn(asyncio.to_thread(tts.preload_piper))
         self.vision = Vision(on_gesture=self._threadsafe(self._on_gesture),
                              on_presence=self._threadsafe(self._on_presence))
@@ -394,7 +390,27 @@ class Pepito:
         self.wa.start()
         self.spawn(self._speaker())
         self.spawn(self._monitor())
-        log.info("Pepito listo")
+        log.info("Cortex listo")
+
+    async def _start_brain(self):
+        try:   # sin carpeta de datos, sin Claude Code instalado…: el panel arranca igual y se arregla desde él
+            datos.folder().mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(self.brain.start)
+        except (OSError, BrainError) as e:
+            log.warning("Claude no arranca: %s", e)
+
+    async def _start_ears(self):
+        try:
+            await asyncio.to_thread(self.stt.load, settings["stt_model"])
+            self.listener = await asyncio.to_thread(
+                Listener, self.mic, self.stt, self._threadsafe(self._on_wake),
+                self._threadsafe(self._on_command), self._threadsafe(self._on_timeout))
+            self.barge = BargeIn(self.mic, self.stt, self._threadsafe(self._on_barge))
+        except Exception:
+            log.exception("No pude cargar el reconocimiento de voz")
+            await self.broadcast({"type": "error", "text": "No pude cargar el reconocimiento de voz. ¿Hay internet? "
+                                  "Reinicia Cortex para reintentarlo; por texto funciona."})
+        await self.broadcast(self.status())
 
     def open_devices(self):
         self.player.close()
@@ -471,7 +487,7 @@ class Pepito:
                 self.spawn(self._duck(state != "idle" and not self._no_duck))
 
     async def _duck(self, down: bool):
-        """Baja la música mientras Pepito escucha o habla, y la devuelve al terminar."""
+        """Baja la música mientras Cortex escucha o habla, y la devuelve al terminar."""
         async with self._duck_lock:
             try:
                 if self.video.playing():
@@ -854,6 +870,11 @@ class Pepito:
             await self._listen()
 
     async def _listen(self):
+        if not self.listener:
+            self._enroll_left = 0
+            await self.broadcast({"type": "error", "text": "El reconocimiento de voz aún se está cargando "
+                                  "(la primera vez se descarga). Mientras, escríbeme."})
+            return
         if self.mic_mute.muted:
             await self.broadcast({"type": "error", "text": "El micro está silenciado en Windows. Actívalo desde Estado."})
         self._followup = False
@@ -862,8 +883,9 @@ class Pepito:
         await self.set_state("listening")
 
     async def _listen_followup(self, gen: int):
-        """Tras responder, deja el micro abierto unos segundos para contestar sin decir «Pepito»."""
-        if gen != self._gen or self.state != "idle" or self._enroll_left or not settings["followup_seconds"]:
+        """Tras responder, deja el micro abierto unos segundos para contestar sin decir «Cortex»."""
+        if not self.listener or gen != self._gen or self.state != "idle" or self._enroll_left or \
+                not settings["followup_seconds"]:
             return
         self._followup = True
         # el micro sigue silenciado un instante tras hablar (eco): se cuenta desde que se abre
@@ -885,7 +907,7 @@ class Pepito:
         if self.state == "listening":
             await self.set_state("idle")
 
-    # ---------- muestras de «Pepito» ----------
+    # ---------- muestras de «Cortex» ----------
     async def enroll(self, total: int = 6):
         await self.interrupt()
         self._enroll_left = total
@@ -966,7 +988,7 @@ class Pepito:
         asked = last.rstrip().endswith("?")
         if not text or (followup and not asked and is_ack(text)):
             # «ah vale», «okey»… después de una respuesta: no hace falta contestar
-            # (salvo que Pepito acabara de preguntar algo: entonces «sí» o «vale» es la respuesta)
+            # (salvo que Cortex acabara de preguntar algo: entonces «sí» o «vale» es la respuesta)
             await self.set_state("idle")
             return
         await self._handle(text, lang, "voz")
@@ -1236,7 +1258,7 @@ class Pepito:
                 self._sentences.task_done()
 
     async def _monitor(self):
-        """Silencia el micro mientras suena Pepito (con una cola para el eco del Bluetooth)."""
+        """Silencia el micro mientras suena Cortex (con una cola para el eco del Bluetooth)."""
         while True:
             try:
                 await self._monitor_loop()
@@ -1388,14 +1410,14 @@ class Pepito:
             self._vision_sent = light
             await self.broadcast({"type": "vision", **state})
 
-    # ---------- reentrenar «Pepito» ----------
+    # ---------- reentrenar «Cortex» ----------
     def _maybe_nightly_retrain(self):
         t = datetime.now()
         if t.hour != 4 or self._retrained_day == t.date() or self.state != "idle":
             return
         self._retrained_day = t.date()
-        model = MODELS_DIR / "pepito_wake.npz"
-        real = list((MODELS_DIR / "wake_train").glob("*_real/*.wav"))
+        model = MODELS_DIR / "cortex_wake.npz"
+        real = list((MODELS_DIR / "wake_train_cortex").glob("*_real/*.wav"))
         if model.exists() and real and max(f.stat().st_mtime for f in real) > model.stat().st_mtime:
             self.spawn(self.retrain_wake())
 
@@ -1405,7 +1427,7 @@ class Pepito:
             return
         self._retraining = True
         await self.broadcast({"type": "wake_train", "running": True})
-        log.info("Reentrenando el detector de «Pepito»")
+        log.info("Reentrenando el detector de «Cortex»")
         try:
             proc = await asyncio.create_subprocess_exec(
                 str(ROOT / ".venv" / "Scripts" / "python.exe"), str(ROOT / "tools" / "train_wake.py"),
@@ -1414,7 +1436,7 @@ class Pepito:
             out, _ = await proc.communicate()
             (ROOT / "logs" / "train_wake.log").write_bytes(out)
             ok = proc.returncode == 0
-            if ok:
+            if ok and self.listener:
                 self.listener.reload_detector()
             summary = [l for l in out.decode("utf-8", "replace").splitlines() if l.startswith("umbral 0.85")]
             log.info("Reentrenado (%s): %s", "ok" if ok else "fallo", summary)
@@ -1456,7 +1478,7 @@ class Pepito:
             log.exception("Error mirando los avisos")
             return
         for a in fired:
-            # espera a que Pepito acabe lo que esté haciendo (máx. 2 min) para no pisarle
+            # espera a que Cortex acabe lo que esté haciendo (máx. 2 min) para no pisarle
             for _ in range(240):
                 if self.state == "idle":
                     break
@@ -1482,7 +1504,7 @@ class Pepito:
 
 
 def keep_awake():
-    """Que el portátil no se duerma ni apague la pantalla mientras Pepito esté vivo (se deshace al salir)."""
+    """Que el portátil no se duerma ni apague la pantalla mientras Cortex esté vivo (se deshace al salir)."""
     import ctypes
     ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x00000001, 0x00000002
     try:
@@ -1629,10 +1651,17 @@ async def whatsapp_media(jid: str, id: str):
 
 @app.post("/api/whatsapp/mote")
 async def whatsapp_mote(body: dict):
-    """Mote de un contacto (vacío = quitarlo): Pepito lo dice así en avisos, panel y respuestas."""
+    """Mote de un contacto (vacío = quitarlo): Cortex lo dice así en avisos, panel y respuestas."""
     await asyncio.to_thread(pepito.wa.set_mote, str(body.get("name", "")), str(body.get("mote", "")))
     await pepito.check_whatsapp()
     return {"ok": True}
+
+
+@app.post("/api/whatsapp/send")
+async def whatsapp_send(body: dict):
+    """Enviar desde el chat abierto en el panel, si el usuario eligió «leer y escribir». Claude no tiene esta herramienta."""
+    error = await asyncio.to_thread(pepito.wa.send, str(body.get("jid", "")), str(body.get("text", "")))
+    return {"ok": not error, "error": error}
 
 
 @app.post("/api/whatsapp/check")
@@ -2128,7 +2157,7 @@ async def set_weather_place(body: dict):
 @app.post("/api/voice/test")
 async def test_voice(body: dict):
     lang = body.get("lang", "es")
-    text = {"es": "¡Hola! Soy Pepito. Así sueno ahora mismo.", "en": "Hi! I'm Pepito. This is how I sound."}[lang]
+    text = {"es": "¡Hola! Soy Cortex, tu asistente de voz. Así sueno ahora mismo.", "en": "Hi! I'm Cortex. This is how I sound."}[lang]
     pepito._speak_lang = lang
     pepito._queue_sentence(text)
     return {"ok": True}
@@ -2136,6 +2165,57 @@ async def test_voice(body: dict):
 
 def _page(message: str) -> HTMLResponse:
     return HTMLResponse(f"<p style='font:18px system-ui;padding:40px'>{message} <a href='/'>Volver</a></p>")
+
+
+# ---------- primera vez ----------
+@app.get("/api/setup")
+async def setup_state():
+    """Qué cuentas están ya conectadas (para el asistente de configuración). Sin datos de las cuentas."""
+    return {"claude": await asyncio.to_thread(claude_status),
+            "spotify": {"client_id": bool(pepito.spotify.client_id), "connected": pepito.spotify.connected,
+                        "redirect_uri": pepito.spotify.redirect_uri},
+            "email": {"connected": pepito.mail.configured},
+            "whatsapp": {"available": pepito.wa.available, "state": pepito.wa.state, "qr": bool(pepito.wa.qr)}}
+
+
+@app.post("/api/setup/claude")
+async def setup_claude():
+    try:
+        await asyncio.to_thread(claude_login)
+    except (OSError, BrainError) as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True}
+
+
+@app.post("/api/setup/claude/start")
+async def setup_claude_start():
+    """Tras iniciar sesión: arranca el cerebro sin reiniciar Cortex."""
+    pepito.spawn(pepito._start_brain())
+    return {"ok": True}
+
+
+@app.post("/api/setup/spotify")
+async def setup_spotify(body: dict):
+    client_id = str(body.get("client_id", "")).strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", client_id):
+        return {"ok": False, "error": "El Client ID son 32 letras y números (a-f, 0-9)."}
+    await asyncio.to_thread(save_env, {"SPOTIFY_CLIENT_ID": client_id})
+    return {"ok": True}
+
+
+@app.post("/api/setup/whatsapp")
+async def setup_whatsapp():
+    pepito.wa.start(link=True)
+    return {"ok": pepito.wa.available}
+
+
+@app.post("/api/quit")
+async def quit_app():
+    """Cierra Cortex entero (sin consola no hay otra ventana que cerrar)."""
+    await asyncio.to_thread(pepito.brain.stop)
+    pepito.wa.stop()
+    asyncio.get_running_loop().call_later(0.3, os._exit, 0)
+    return {"ok": True}
 
 
 @app.get("/spotify/login")
@@ -2235,7 +2315,7 @@ async def ws_endpoint(ws: WebSocket):
                 await pepito.send_text(msg["text"])
             elif action == "enroll":
                 await pepito.enroll()
-            elif action == "enroll_clear":
+            elif action == "enroll_clear" and pepito.listener:
                 await asyncio.to_thread(pepito.listener.print.clear_samples)
                 await pepito.broadcast(pepito.status())
             elif action == "unmute_mic":

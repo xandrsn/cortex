@@ -3,7 +3,7 @@
 - Player: un OutputStream persistente al que se le encolan trozos de audio. Al estar siempre abierto,
   el Echo por Bluetooth no se duerme y no se come las primeras sílabas.
 - Mic: un InputStream persistente que reparte bloques de 16 kHz mono a quien escuche (el oído).
-  Mientras Pepito habla, el micro se ignora para que no se escuche a sí mismo.
+  Mientras Cortex habla, el micro se ignora para que no se escuche a sí mismo.
 """
 
 import logging

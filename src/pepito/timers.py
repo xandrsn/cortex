@@ -1,4 +1,4 @@
-"""Temporizadores de cocina («Pepito, pon un temporizador de 10 minutos para la pasta»).
+"""Temporizadores de cocina («Cortex, pon un temporizador de 10 minutos para la pasta»).
 
 Se guardan en logs/timers.json para sobrevivir a un reinicio. El orquestador llama a due() cada segundo.
 """

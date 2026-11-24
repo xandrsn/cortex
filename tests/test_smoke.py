@@ -1,4 +1,4 @@
-"""Comprobaciones rápidas de Cortex (sin webcam ni micro): python -m unittest discover -s tests -t ."""
+"""Comprobaciones rápidas de Cortex (sin webcam ni micro): python -m pytest -q"""
 
 import sys
 import unittest
@@ -9,17 +9,21 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 class CortexSmoke(unittest.TestCase):
-    def test_assistant_imports_and_defaults(self):
+    def test_hub_imports_and_defaults(self):
         from importlib.util import find_spec
-        from pepito import config
+        from hub import config
         self.assertEqual(config.ROOT, ROOT)
-        self.assertIn("window_gestures", config.DEFAULTS)
-        self.assertFalse(config.DEFAULTS["gestures_enabled"])
-        self.assertIsNotNone(find_spec("pepito.app"))   # no se importa: importarlo arranca el asistente
+        self.assertTrue((config.WEB_DIR / "index.html").exists())
+        self.assertNotIn("camera_index", config.DEFAULTS)   # la cámara es de Sense
+        self.assertIsNotNone(find_spec("hub.app"))   # no se importa: importarlo arranca el asistente
 
-    def test_gesture_package_imports(self):
-        from gesture import hand_tracker  # noqa: F401  (gesture.main abre la cámara al importarse: no se importa)
-        self.assertTrue((ROOT / "src" / "gesture" / "hand_landmarker.task").exists())
+    def test_sense_imports_and_defaults(self):
+        from sense import config
+        from sense.window import hand_tracker  # noqa: F401  (window.main abre pygame al usarse: no se importa)
+        self.assertEqual(config.ROOT, ROOT)
+        self.assertTrue((config.WEB_DIR / "index.html").exists())
+        self.assertTrue((ROOT / "src" / "sense" / "window" / "hand_landmarker.task").exists())
+        self.assertEqual(config.DEFAULTS["ui_port"], 8766)
 
     def test_no_secret_files_in_tree(self):
         for name in (".env", "whatsapp-mcp.json"):

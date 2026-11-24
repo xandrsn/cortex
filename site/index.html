@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cortex · a voice assistant and gesture control for Windows</title>
-<meta name="description" content="Talk to your PC, move windows with your hands and keep your day on one panel. Try part of it in the browser, or install it on Windows.">
+<title>Cortex · gesture control and a voice assistant for Windows</title>
+<meta name="description" content="A hobby AI project in two apps: Cortex Sense turns webcam hand gestures into commands, Cortex Hub is a voice assistant and dashboard. They connect over a local WebSocket.">
 <style>
 :root{--bg:#0b0d10;--card:#14181d;--line:#262c34;--text:#e8eaed;--muted:#a8afb8;--accent:#6ea8fe;--ok:#7ddba3}
 *{box-sizing:border-box}
@@ -42,10 +42,10 @@ footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--muted)}
 <header class="wrap"><nav aria-label="Main"><b>Cortex</b><a href="#try">Try it</a><a href="#install">Install</a><a href="#accounts">Accounts</a><a href="#privacy">Privacy</a><a href="https://github.com/xandrsn/cortex">GitHub</a></nav></header>
 <main>
 <div class="wrap hero">
-  <h1>Talk to your PC. Move its windows by hand.</h1>
-  <p class="lead">Cortex is a Windows app with a voice assistant, webcam gestures and a panel for your day. This site is a smaller version you can try now.</p>
-  <div class="row"><a class="btn" href="/demo/">Open the web demo</a><a class="btn alt" href="https://github.com/xandrsn/cortex/releases/latest/download/CortexSetup.exe">Download for Windows</a></div>
-  <p class="small">v0.2.0 · Windows 10/11, 64-bit · the app and the demo are in Spanish</p>
+  <h1>Gestures in. Commands out.</h1>
+  <p class="lead">Cortex is a hobby AI project in two Windows apps. <b>Cortex Sense</b> reads your hands through the webcam, calibrates to you and turns 29 gestures (or your own) into keys, media, apps, window moves or Hub actions. <b>Cortex Hub</b> is a voice assistant and dashboard on top of an LLM. Each works alone; together they talk over a local WebSocket.</p>
+  <div class="row"><a class="btn" href="/demo/">Open the web demo</a><a class="btn alt" href="https://github.com/xandrsn/cortex/releases">Download for Windows</a></div>
+  <p class="small">v0.3.0 · Windows 10/11, 64-bit · Sense is in English; Hub and the demo are in Spanish</p>
 </div>
 
 <section id="try"><div class="wrap">
@@ -72,10 +72,10 @@ footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--muted)}
 </div></section>
 
 <section id="install"><div class="wrap">
-  <h2>Install in four steps</h2>
-  <p>No administrator rights are needed. Windows may warn you because the installer is not signed.</p>
+  <h2>Install</h2>
+  <p>Two installers, no administrator rights needed. Windows may warn you because they are not signed. <b>CortexSenseSetup.exe</b> shows a webcam privacy notice and opens a three-step calibration (look, hand size, pinch). <b>CortexHubSetup.exe</b> sets up the assistant:</p>
   <ol class="steps grid">
-    <li class="card"><h3>Run CortexSetup.exe</h3><p>Choose the language and the folder.</p></li>
+    <li class="card"><h3>Run CortexHubSetup.exe</h3><p>Choose the language and the folder.</p></li>
     <li class="card"><h3>Pick your widgets</h3><p>Tick the cards you want on the panel. You can change them later.</p></li>
     <li class="card"><h3>Pick your accounts</h3><p>Claude, Spotify, email or none. The installer never asks for a password.</p></li>
     <li class="card"><h3>Sign in, one at a time</h3><p>Cortex opens a wizard that guides each login. You can skip any of them.</p></li>

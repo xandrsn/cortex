@@ -1,4 +1,5 @@
-﻿; Instalador de Cortex (Inno Setup 6). Lo compila build.ps1: ISCC /DAppVersion=x.y.z [/DBridge=carpeta] installer\cortex.iss
+﻿; Instalador de Cortex Hub (Inno Setup 6). Lo compila build.ps1: ISCC /DAppVersion=x.y.z [/DBridge=carpeta] installer\cortex-hub.iss
+; Los gestos van aparte: installer\cortex-sense.iss. AppId es el de la versión de una sola app: actualiza encima.
 ; Por usuario y sin administrador: Cortex escribe config.yaml, .env y los modelos en su propia carpeta.
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -6,7 +7,7 @@
 
 [Setup]
 AppId={{6E0B6E5C-6B1B-4C0B-9C5B-5B7B0E6F2A41}
-AppName=Cortex
+AppName=Cortex Hub
 AppVersion={#AppVersion}
 AppPublisher=Charlie Andersen
 AppPublisherURL=https://github.com/xandrsn/cortex
@@ -20,9 +21,9 @@ MinVersion=10.0
 WizardStyle=modern
 ShowLanguageDialog=auto
 CloseApplications=no
-UninstallDisplayIcon={app}\Cortex.exe
+UninstallDisplayIcon={app}\CortexHub.exe
 OutputDir=..\dist
-OutputBaseFilename=CortexSetup
+OutputBaseFilename=CortexHubSetup
 Compression=lzma2
 SolidCompression=yes
 
@@ -59,8 +60,6 @@ es.TaskDesktop=Acceso directo en el escritorio
 en.TaskDesktop=Desktop shortcut
 es.TaskAutostart=Abrir Cortex al iniciar Windows (en segundo plano, con el micro activo)
 en.TaskAutostart=Start Cortex with Windows (in the background, microphone on)
-es.TaskGestures=Mover ventanas con gestos (usa la webcam, se procesa en tu equipo)
-en.TaskGestures=Move windows with gestures (uses the webcam, processed on your computer)
 es.RunNow=Abrir Cortex
 en.RunNow=Open Cortex
 es.DataKept=Cortex se ha desinstalado. Tus datos (ajustes, claves, mensajes vinculados) siguen en:%n%n%1%n%nBorra esa carpeta si no los quieres conservar.
@@ -69,29 +68,29 @@ es.NotStopped=No se ha podido cerrar Cortex. Ciérralo (Ajustes → Cerebro → 
 en.NotStopped=Cortex could not be closed. Close it (Ajustes → Cerebro → Cerrar Cortex) and try again.
 
 [Tasks]
-Name: "gestures"; Description: "{cm:TaskGestures}"; Check: FirstInstall
 Name: "desktop"; Description: "{cm:TaskDesktop}"
 Name: "autostart"; Description: "{cm:TaskAutostart}"; Flags: unchecked
 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}\web"
+Type: files; Name: "{app}\Cortex.exe"
 
 [Files]
-Source: "..\dist\Cortex\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\CortexHub\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 #ifdef Bridge
 Source: "{#Bridge}\*"; DestDir: "{app}\whatsapp-mcp\whatsapp-bridge"; Flags: ignoreversion; Check: WantsWhatsApp
 #endif
 
 [Icons]
-Name: "{autoprograms}\Cortex"; Filename: "{app}\Cortex.exe"; Parameters: "--open"
-Name: "{autodesktop}\Cortex"; Filename: "{app}\Cortex.exe"; Parameters: "--open"; Tasks: desktop
+Name: "{autoprograms}\Cortex Hub"; Filename: "{app}\CortexHub.exe"; Parameters: "--open"
+Name: "{autodesktop}\Cortex Hub"; Filename: "{app}\CortexHub.exe"; Parameters: "--open"; Tasks: desktop
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Cortex"; ValueData: """{app}\Cortex.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Cortex"; ValueData: """{app}\CortexHub.exe"""; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\Cortex.exe"; Parameters: "--open"; Description: "{cm:RunNow}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\CortexHub.exe"; Parameters: "--open"; Description: "{cm:RunNow}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; solo lo que se vuelve a descargar o a generar; los datos del usuario no se tocan
@@ -120,7 +119,7 @@ procedure InitializeWizard;
 begin
   Ids := TStringList.Create;
   Widgets := CreateInputOptionPage(wpSelectDir, CustomMessage('WidgetsTitle'), '', CustomMessage('WidgetsText'), False, True);
-  { mismos ids que WIDGETS en web/app.js (tests/test_installer.py lo comprueba) }
+  { mismos ids que WIDGETS en web/hub/app.js (tests/test_installer.py lo comprueba) }
   AddWidget('today', 'Hoy', 'Today', True);
   AddWidget('tasks', 'Tareas', 'Tasks', True);
   AddWidget('avisos', 'Avisos', 'Reminders', True);
@@ -183,7 +182,7 @@ begin
   Dir := ExpandConstant('{app}\');
   StringChangeEx(Dir, '''', '''''', True);
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -Command "$p = @(Get-Process Cortex,whatsapp-bridge -ErrorAction SilentlyContinue | Where-Object { $_.Path -and ' +
+    '-NoProfile -Command "$p = @(Get-Process Cortex,CortexHub,whatsapp-bridge -ErrorAction SilentlyContinue | Where-Object { $_.Path -and ' +
     '$_.Path.StartsWith(''' + Dir + ''', ''OrdinalIgnoreCase'') }); if ($p) { $p | Stop-Process -Force -ErrorAction SilentlyContinue; ' +
     '$p | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue }; exit @($p | Where-Object { -not $_.HasExited }).Count"',
     '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
@@ -211,7 +210,7 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Names: TStringList;
-  Gestures, Mode: String;
+  Mode: String;
 begin
   if (CurStep <> ssPostInstall) or not Fresh then Exit;
   Names := TStringList.Create;
@@ -225,9 +224,7 @@ begin
 #ifdef Bridge
   if WantsWhatsApp and (WaMode.SelectedValueIndex = 1) then Mode := 'write';
 #endif
-  if WizardIsTaskSelected('gestures') then Gestures := 'true' else Gestures := 'false';
   SaveStringToFile(ExpandConstant('{app}\config.yaml'),
-    'window_gestures: ' + Gestures + #13#10 +
     'whatsapp_mode: ' + Mode + #13#10 +
     'setup_widgets: [' + ListOf(Widgets, Ids) + ']' + #13#10 +
     'setup_accounts: [' + ListOf(Accounts, Names) + ']' + #13#10, False);

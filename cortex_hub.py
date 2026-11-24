@@ -1,10 +1,10 @@
-"""Cortex: una sola app con el asistente de voz (Cortex) y el control de ventanas con gestos (Jarvis).
+"""Cortex Hub: asistente de voz y panel (http://127.0.0.1:<ui_port>, 8765 de serie).
 
-El asistente corre en un hilo (panel en http://127.0.0.1:<ui_port>); el control de gestos, que necesita la
-ventana de pygame, corre en el hilo principal. Si falla (p. ej. sin webcam), el asistente sigue funcionando.
+Los gestos son de Cortex Sense (sense.py, otro programa): Hub se conecta a ws://127.0.0.1:8766/ws y ejecuta
+los gestos con acción de Hub. Sin Sense, Hub funciona igual, solo que sin gestos.
 
 `--open` (accesos directos del instalador) abre el panel en el navegador. Si Cortex ya está en marcha, no se arranca otro.
-`Cortex.exe --selftest` solo importa las librerías y los módulos (sin webcam, sin ventanas) y sale con 0 si todo carga.
+`CortexHub.exe --selftest` solo importa las librerías y los módulos (sin webcam, sin ventanas) y sale con 0 si todo carga.
 """
 
 import os
@@ -12,7 +12,6 @@ import sys
 import threading
 from pathlib import Path
 
-os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 if getattr(sys, "frozen", False):
@@ -29,10 +28,10 @@ def selftest() -> int:
     import importlib.util
     import platform
 
-    # pepito.app y gesture.main se buscan sin importarlos: al importarlos arrancan el asistente (micro, modelos)
-    mods = ["cv2", "numpy", "mediapipe", "pygame", "gesture.hand_tracker", "pepito.config",
+    # hub.app se busca sin importarlo: al importarlo arranca el asistente (micro, modelos)
+    mods = ["numpy", "hub.config", "hub.sense_link", "websockets",
             "uvicorn", "faster_whisper", "onnx_asr", "openwakeword", "piper", "edge_tts", "sounddevice"]
-    lazy = ["pepito.app", "gesture.main"]
+    lazy = ["hub.app"]
     failed = []
     print(f"Python {platform.python_version()} en {platform.platform()}")
     for name in mods:
@@ -46,15 +45,8 @@ def selftest() -> int:
         if importlib.util.find_spec(name) is None:
             failed.append(name)
         print(f"  {'ok' if name not in failed else 'FALLO'}  {name} (encontrado, sin importar)")
-    import cv2
-    print(f"OpenCV {cv2.__version__} · build: {'contrib' if 'contrib' in cv2.getBuildInformation().lower() else 'base'}")
-    from gesture import hand_tracker
-    hand_ok = Path(hand_tracker._MODEL_PATH).exists()   # el modelo va empaquetado junto al módulo gesture
-    print(f"modelo de manos: {'ok' if hand_ok else 'FALTA ' + hand_tracker._MODEL_PATH}")
-    if not hand_ok:
-        failed.append("hand_landmarker.task")
     oww = Path(importlib.util.find_spec("openwakeword").origin).parent / "resources" / "models"
-    for f in (Path(importlib.util.find_spec("pepito").origin).with_name("silero_vad.onnx"),
+    for f in (Path(importlib.util.find_spec("hub").origin).with_name("silero_vad.onnx"),
               oww / "melspectrogram.onnx", oww / "embedding_model.onnx"):
         print(f"  {'ok' if f.exists() else 'FALTA'}  {f.name}")
         if not f.exists():
@@ -80,36 +72,27 @@ def open_panel(port: int, wait: float = 60) -> None:
 
 
 def main() -> None:
-    # En el exe, sys.executable es Cortex.exe: `-m pepito.micmute` (audio.py) tiene que ejecutar solo ese módulo,
-    # o cada Cortex arrancaría otro Cortex sin fin.
-    if sys.argv[1:3] == ["-m", "pepito.micmute"]:
-        from pepito.micmute import main as run_micmute
+    # En el exe, sys.executable es CortexHub.exe: `-m hub.micmute` (audio.py) tiene que ejecutar solo ese módulo,
+    # o cada Hub arrancaría otro Hub sin fin.
+    if sys.argv[1:3] == ["-m", "hub.micmute"]:
+        from hub.micmute import main as run_micmute
         return run_micmute()
     if "--selftest" in sys.argv:
         sys.exit(selftest())
 
-    from pepito.config import settings
+    from hub.config import settings
     port = settings["ui_port"]
     if already_running(port):
         if "--open" in sys.argv:
             open_panel(port)
         return
-    from pepito import main as run_assistant
-    import pepito.app  # noqa: F401  (uvicorn lo carga por nombre; así PyInstaller lo empaqueta)
+    from hub import main as run_assistant
+    import hub.app  # noqa: F401  (uvicorn lo carga por nombre; así PyInstaller lo empaqueta)
 
     # Sin --open no abre ningún navegador: el panel queda en http://127.0.0.1:<ui_port>.
-    server = threading.Thread(target=run_assistant, name="cortex-assistant", daemon=True)
-    server.start()
     if "--open" in sys.argv:
         threading.Thread(target=open_panel, args=(port,), daemon=True).start()
-
-    if settings["window_gestures"]:
-        try:
-            from gesture.main import main as run_gestures
-            run_gestures()
-        except SystemExit as e:   # gesture main() sale así si no hay webcam: el asistente sigue
-            print(f"Control de gestos desactivado: {e}")
-    server.join()
+    run_assistant()
 
 
 if __name__ == "__main__":

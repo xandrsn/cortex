@@ -62,14 +62,14 @@ await demo.api("POST", "/api/settings", "", { whatsapp_mode: "write" });
 assert.equal((await demo.api("POST", "/api/whatsapp/send", "", { jid: wa, text: "hola" })).ok, true);
 assert.equal((await demo.api("GET", "/api/whatsapp")).chats[0].mine, true);
 // cada GET del panel tiene respuesta
-for (const path of fs.readFileSync(new URL("../web/app.js", import.meta.url), "utf8").matchAll(/fetch\(["`](\/api\/[a-z/]+)/g)) {
+for (const path of fs.readFileSync(new URL("../web/hub/app.js", import.meta.url), "utf8").matchAll(/fetch\(["`](\/api\/[a-z/]+)/g)) {
   const p = path[1].replace(/\/$/, "/x");
   const got = await Promise.all(["GET", "POST"].map(m => demo.api(m, p)));
   assert.ok(got.every(g => g !== undefined), p);
 }
 
-// ---------- reparto de las tarjetas elegidas (web/app.js) ----------
-const app = fs.readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+// ---------- reparto de las tarjetas elegidas (web/hub/app.js) ----------
+const app = fs.readFileSync(new URL("../web/hub/app.js", import.meta.url), "utf8");
 const cut = (from, to) => app.slice(app.indexOf(from), app.indexOf(to, app.indexOf(from)));
 const ctx = { structuredClone };
 vm.runInNewContext(cut("const DEFAULT_LAYOUT", "const GESTURES") + cut("function layoutFor", "async function loadLayout") + "this.out = { layoutFor, DEFAULT_LAYOUT };", ctx);

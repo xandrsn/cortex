@@ -11,7 +11,7 @@ import yaml
 from dotenv import load_dotenv
 
 ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]   # exe: junto al .exe
-WEB_DIR = ROOT / "web"
+WEB_DIR = ROOT / "web" / "hub"
 MODELS_DIR = ROOT / "models"
 LOGS_DIR = ROOT / "logs"
 CONFIG_FILE = ROOT / "config.yaml"
@@ -61,7 +61,6 @@ DEFAULTS = {
     "setup_widgets": [],             # tarjetas elegidas al instalar ([] = las de serie)
     "setup_accounts": ["claude", "spotify", "email", "whatsapp"],
     "whatsapp_mode": "read",     # read (solo leer) | write (leer y escribir desde el panel)
-    "window_gestures": True,     # Cortex: control de ventanas con gestos (src/gesture); necesita webcam
     # Panel
     "accent": "#0b8f55",
     "text_scale": 1,
@@ -70,36 +69,22 @@ DEFAULTS = {
     # Avisos: horas de silencio (HH:MM; vacío = sin silencio). Lo que toque dentro espera al final.
     "quiet_start": "",
     "quiet_end": "",
-    # Cámara y gestos (vision.py)
-    "camera_index": 0,
-    "gestures_enabled": False,       # gestos de la visión de Cortex; apagado: comparte webcam con window_gestures
-    "gestures_require_look": True,   # los gestos solo cuentan mirando a la pantalla
-    "look_max_angle": 22,            # grados de giro/cabeceo máximos para «mirando»
-    "look_pitch_offset": 0,          # grados: centro del cabeceo (+ = abajo, la pantalla está bajo la cámara)
-    "gesture_min_score": 0.6,
-    "gesture_hold_seconds": 0.35,
-    "gesture_cooldown": 1.0,
-    "swipe_min_distance": 0.22,      # fracción del encuadre
-    "custom_gesture_threshold": 0.22,  # distancia media máxima (en palmos) para aceptar un gesto propio
-    "gesture_actions": {
-        "swipe_left": "next", "swipe_right": "previous", "open_palm": "toggle",
-        "thumb_up": "volume_up", "thumb_down": "volume_down", "pointing_up": "pepito",
-        "victory": "none", "closed_fist": "none", "i_love_you": "none",
-        "swipe_up": "none", "swipe_down": "none",
-        # movimientos
-        "flick_right": "next", "flick_left": "previous", "circle_cw": "next", "circle_ccw": "previous",
-        "wag": "stop", "wave": "none", "push": "none",
-        # posturas extra
-        "ok": "none", "shaka": "none", "rock": "none", "three": "none", "shush": "quiet",
-        # dos manos
-        "both_palms": "stop", "both_thumbs_up": "none", "both_thumbs_down": "none", "both_fists": "none",
-        "hands_apart": "volume_up", "hands_together": "volume_down",
-    },
+    # Gestos: los lleva Cortex Sense (otro programa). Estos cuatro se ven y se cambian desde el panel de Hub,
+    # pero se guardan en Sense; los valores de aquí solo se ven si Sense no está en marcha.
+    "sense_url": "http://127.0.0.1:8766",
+    "gestures_enabled": False,
+    "gestures_require_look": True,
+    "window_gestures": False,
+    "gesture_actions": {},
 }
+
+
+SENSE_KEYS = ("gestures_enabled", "gestures_require_look", "window_gestures", "gesture_actions")
 
 
 class Settings:
     def __init__(self):
+        self.sense = None   # SenseLink, lo pone app.py: los ajustes de SENSE_KEYS van y vienen de Cortex Sense
         self._lock = threading.Lock()
         self._data = dict(DEFAULTS)
         if CONFIG_FILE.exists():
@@ -112,13 +97,27 @@ class Settings:
         if os.environ.get("CORTEX_USER_NAME"):   # el entorno / .env manda sobre config.yaml
             self._data["user_name"] = os.environ["CORTEX_USER_NAME"]
 
+    def _remote(self) -> dict:
+        live = self.sense.settings if self.sense and self.sense.connected else {}
+        return {k: live[k] for k in SENSE_KEYS if k in live}
+
     def __getitem__(self, key):
+        if key in SENSE_KEYS:
+            return self._remote().get(key, self._data[key])
         return self._data[key]
 
     def all(self) -> dict:
-        return dict(self._data)
+        return {**self._data, **self._remote()}
 
     def update(self, changes: dict) -> None:
+        remote = {k: v for k, v in changes.items() if k in SENSE_KEYS}
+        if remote:
+            if self.sense and self.sense.connected:
+                if err := self.sense.update_settings(remote):
+                    logging.getLogger("hub").warning("Sense no aceptó %s: %s", remote, err)
+            changes = {k: v for k, v in changes.items() if k not in SENSE_KEYS}
+            if not changes:
+                return
         with self._lock:
             self._data.update({k: v for k, v in changes.items() if k in DEFAULTS})
             CONFIG_FILE.write_text(yaml.safe_dump(self._data, allow_unicode=True, sort_keys=False), encoding="utf-8")

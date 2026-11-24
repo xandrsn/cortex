@@ -267,7 +267,8 @@ def _fill_monitor(hwnd: int,
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
+def main(cap=None) -> None:
+    """cap: un lector de sense.camera.SharedCamera (Sense comparte la webcam con los gestos); sin él, abre la suya."""
     global _threads_alive
 
     vx, vy, vw, vh = detect_virtual_desktop()
@@ -280,14 +281,15 @@ def main() -> None:
     print(f"Work areas: {work_rects}")
 
     # Webcam
-    cap = cv2.VideoCapture(config.WEBCAM_INDEX, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(config.WEBCAM_INDEX)
-    if not cap.isOpened():
-        sys.exit("ERROR: cannot open webcam.")
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  config.WEBCAM_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.WEBCAM_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+    if cap is None:
+        cap = cv2.VideoCapture(config.WEBCAM_INDEX, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(config.WEBCAM_INDEX)
+        if not cap.isOpened():
+            sys.exit("ERROR: cannot open webcam.")
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  config.WEBCAM_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.WEBCAM_HEIGHT)
+        cap.set(cv2.CAP_PROP_FPS, 30)
 
     # Pygame overlay
     os.environ["SDL_VIDEO_WINDOW_POS"] = f"{vx},{vy}"

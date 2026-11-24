@@ -32,9 +32,9 @@ from .listener import BargeIn, Listener, find_wake
 from .router import is_ack, route
 from .spotify import LIKED, Spotify, SpotifyError, norm
 from .stt import MODELS as STT_MODELS, Transcriber, guess_lang, normalize, save_clip
-from .vision import Vision
+from .sense_link import SenseLink
 
-log = logging.getLogger("pepito")
+log = logging.getLogger("hub")
 
 EDGE_VOICES = {
     # las multilingües son la generación nueva (más naturales) y hablan español; Andrew se descarta: lento y corta frases
@@ -206,7 +206,7 @@ GESTURE_NAMES = {
 }
 ACTION_NAMES = {
     "next": "siguiente canción", "previous": "canción anterior", "toggle": "pausar / seguir la música",
-    "volume_up": "subir volumen", "volume_down": "bajar volumen", "pepito": "ponerse a escuchar (como decir «Cortex»)",
+    "volume_up": "subir volumen", "volume_down": "bajar volumen", "listen": "ponerse a escuchar (como decir «Cortex»)",
     "stop": "cortar al asistente (para todo)", "quiet": "callar al asistente (deja de hablar pero sigue con la tarea)",
     "ambient": "modo reposo", "wake_toggle": "pausar/activar la palabra «Cortex»",
     "new_chat": "conversación nueva", "theme": "cambiar tema claro/oscuro",
@@ -281,7 +281,7 @@ def web_version() -> int:
     return int(max(p.stat().st_mtime for p in WEB_DIR.iterdir() if p.is_file()))
 
 
-def gesture_context(vision: "Vision | None") -> str:
+def gesture_context(vision: "SenseLink | None") -> str:
     actions = settings["gesture_actions"]
     used = [f"- {GESTURE_NAMES.get(g, g)} → {ACTION_NAMES.get(a, a)}" for g, a in actions.items() if a and a != "none"]
     free = [GESTURE_NAMES.get(g, g) for g, a in actions.items() if not a or a == "none"]
@@ -291,11 +291,11 @@ def gesture_context(vision: "Vision | None") -> str:
         a = actions.get(c["id"], "none")
         lines.append(f"- gesto propio «{c['name']}» → {ACTION_NAMES.get(a, 'nada')}")
     lines.append(f"- Libres (sin acción): {', '.join(free)}")
-    lines.append("- Cámara " + ("encendida" if vision else "apagada")
+    lines.append("- Cortex Sense (la app de los gestos) " + ("conectada" if vision and vision.connected else "apagada")
                  + (". Solo cuentan mirando a la pantalla" if settings["gestures_require_look"] else "")
                  + ". Para cambiarlos o grabar uno propio: en el panel, Ajustes (la rueda, arriba a la derecha) → pestaña "
-                 "Gestos: ahí se elige la acción de cada gesto y se graban gestos propios. El chip «Gestos» de arriba abre "
-                 "la cámara para ver qué detecta. Tú no puedes cambiarlos.]")
+                 "Gestos, o el panel de Cortex Sense (http://127.0.0.1:8766), que además calibra la cámara y asigna "
+                 "teclas, programas y ventanas. Tú no puedes cambiarlos.]")
     return "\n".join(lines)
 
 
@@ -327,7 +327,7 @@ def bank_context(text: str) -> str:
     return "\n".join(lines)
 
 
-class Pepito:
+class Assistant:
     def __init__(self):
         self.loop: asyncio.AbstractEventLoop | None = None
         self.clients: set[WebSocket] = set()
@@ -337,7 +337,7 @@ class Pepito:
         self.stt = Transcriber()
         self.brain = Brain()
         self.estado = datos.EstadoWriter()
-        self.vision: Vision | None = None
+        self.vision: SenseLink | None = None
         self._retraining = False
         self._retrained_day = None
         self._vision_sent: dict = {}
@@ -384,8 +384,9 @@ class Pepito:
         self.spawn(self._start_brain())
         self.spawn(self._start_ears())   # en segundo plano: la primera vez descarga el modelo y el panel no espera
         self.spawn(asyncio.to_thread(tts.preload_piper))
-        self.vision = Vision(on_gesture=self._threadsafe(self._on_gesture),
-                             on_presence=self._threadsafe(self._on_presence))
+        self.vision = SenseLink(settings["sense_url"], on_gesture=self._threadsafe(self._on_gesture),
+                                on_presence=self._threadsafe(self._on_presence))
+        settings.sense = self.vision
         self.vision.start()
         self.wa.start()
         self.spawn(self._speaker())
@@ -736,7 +737,7 @@ class Pepito:
                 f"{c['name']}{' (grupo)' if c['group'] else ''}: {'yo' if c['mine'] else (c['from'] or c['name'])} «{c['text'][:80]}»"
                 for c in self.wa.chats[:6]))
         parts.append(f"voz {voice_label(settings['voice_es'])} {int(settings['tts_rate']):+d}%, "
-                     f"tema {settings['theme']}, cámara {'sí' if self.vision else 'no'}")
+                     f"tema {settings['theme']}, gestos {'sí' if self.vision and self.vision.connected else 'no'}")
         return "[Ahora mismo (dato del sistema): " + " · ".join(parts) + "]"
 
     def _current_player(self):
@@ -1367,7 +1368,7 @@ class Pepito:
                 await asyncio.to_thread(sp.pause if sp.last_state.get("is_playing") else sp.resume)
             elif action in ("volume_up", "volume_down"):
                 await asyncio.to_thread(sp.change_volume, 5 if action == "volume_up" else -5)   # pasos suaves: los gestos se repiten
-            elif action == "pepito" and self.state == "idle":
+            elif action == "listen" and self.state == "idle":
                 await self._listen()
             elif action == "stop":
                 await self.interrupt()
@@ -1513,7 +1514,7 @@ def keep_awake():
         log.warning("No pude evitar que el portátil se duerma")
 
 
-pepito = Pepito()
+assistant = Assistant()
 
 
 @asynccontextmanager
@@ -1525,14 +1526,14 @@ def _quiet_resets(loop, context):
 
 
 async def lifespan(_app):
-    await pepito.start()
+    await assistant.start()
     yield
-    pepito.brain.stop()
-    pepito.wa.stop()
-    if pepito.vision:
-        pepito.vision.stop()
-    pepito.player.close()
-    pepito.mic.close()
+    assistant.brain.stop()
+    assistant.wa.stop()
+    if assistant.vision:
+        assistant.vision.stop()
+    assistant.player.close()
+    assistant.mic.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1580,16 +1581,16 @@ async def save_settings(changes: dict):
     settings.update(changes)
     changed = {k for k, v in settings.all().items() if old.get(k) != v}
     if changed & {"mic_device", "speaker_device"}:
-        await asyncio.to_thread(pepito.open_devices)
+        await asyncio.to_thread(assistant.open_devices)
     if "stt_model" in changed:
-        await asyncio.to_thread(pepito.stt.load, settings["stt_model"])
+        await asyncio.to_thread(assistant.stt.load, settings["stt_model"])
     if "data_dir" in changed:
-        await asyncio.to_thread(pepito.brain.start)
-        await pepito._refresh_data()
-    if "claude_model" in changed and pepito.state == "idle":
-        await asyncio.to_thread(pepito.brain.maintain)
-    await pepito.broadcast(pepito.status())
-    await pepito.broadcast({"type": "settings", "settings": settings.all()})
+        await asyncio.to_thread(assistant.brain.start)
+        await assistant._refresh_data()
+    if "claude_model" in changed and assistant.state == "idle":
+        await asyncio.to_thread(assistant.brain.maintain)
+    await assistant.broadcast(assistant.status())
+    await assistant.broadcast({"type": "settings", "settings": settings.all()})
     return await get_settings()
 
 
@@ -1617,29 +1618,29 @@ async def youtube_search(q: str = ""):
 @app.get("/favicon.ico")
 async def favicon():
     """El mismo icono que el de la bandeja (lo crea tools/tray.py)."""
-    ico = ROOT / "logs" / "pepito.ico"
+    ico = ROOT / "logs" / "cortex.ico"
     return FileResponse(ico, media_type="image/x-icon") if ico.exists() else Response(status_code=204)
 
 
 @app.get("/api/mail")
 async def get_mail():
-    return pepito.mail.summary()
+    return assistant.mail.summary()
 
 
 @app.get("/api/whatsapp")
 async def get_whatsapp():
-    return pepito.wa.summary()
+    return assistant.wa.summary()
 
 
 @app.get("/api/whatsapp/chat")
 async def whatsapp_chat(jid: str):
-    return await asyncio.to_thread(pepito.wa.messages, jid)
+    return await asyncio.to_thread(assistant.wa.messages, jid)
 
 
 @app.get("/api/whatsapp/media")
 async def whatsapp_media(jid: str, id: str):
     try:
-        path = await asyncio.to_thread(pepito.wa.media_file, jid, id)
+        path = await asyncio.to_thread(assistant.wa.media_file, jid, id)
     except Exception as e:
         gone = any(k in str(e) for k in ("403", "404", "410", "incomplete media"))
         log.info("WhatsApp: no pude bajar %s: %s", id, e)
@@ -1652,30 +1653,30 @@ async def whatsapp_media(jid: str, id: str):
 @app.post("/api/whatsapp/mote")
 async def whatsapp_mote(body: dict):
     """Mote de un contacto (vacío = quitarlo): Cortex lo dice así en avisos, panel y respuestas."""
-    await asyncio.to_thread(pepito.wa.set_mote, str(body.get("name", "")), str(body.get("mote", "")))
-    await pepito.check_whatsapp()
+    await asyncio.to_thread(assistant.wa.set_mote, str(body.get("name", "")), str(body.get("mote", "")))
+    await assistant.check_whatsapp()
     return {"ok": True}
 
 
 @app.post("/api/whatsapp/send")
 async def whatsapp_send(body: dict):
     """Enviar desde el chat abierto en el panel, si el usuario eligió «leer y escribir». Claude no tiene esta herramienta."""
-    error = await asyncio.to_thread(pepito.wa.send, str(body.get("jid", "")), str(body.get("text", "")))
+    error = await asyncio.to_thread(assistant.wa.send, str(body.get("jid", "")), str(body.get("text", "")))
     return {"ok": not error, "error": error}
 
 
 @app.post("/api/whatsapp/check")
 async def whatsapp_check():
     """Botón «Recargar» del panel: mira ya si hay mensajes nuevos."""
-    await pepito.check_whatsapp()
-    return pepito.wa.summary()
+    await assistant.check_whatsapp()
+    return assistant.wa.summary()
 
 
 @app.post("/api/whatsapp/mute")
 async def whatsapp_mute(body: dict):
     """Silenciar o no un chat (que avise o no). Los grupos vienen silenciados."""
-    await asyncio.to_thread(pepito.wa.set_muted, str(body.get("jid", "")), str(body.get("name", "")), bool(body.get("muted")))
-    await pepito.broadcast({"type": "whatsapp", **pepito.wa.summary()})
+    await asyncio.to_thread(assistant.wa.set_muted, str(body.get("jid", "")), str(body.get("name", "")), bool(body.get("muted")))
+    await assistant.broadcast({"type": "whatsapp", **assistant.wa.summary()})
     return {"ok": True}
 
 
@@ -1685,7 +1686,7 @@ async def whatsapp_qr():
     import io
     import qrcode
     import qrcode.image.svg
-    code = pepito.wa.qr
+    code = assistant.wa.qr
     if not code:
         return Response(status_code=404)
     buf = io.BytesIO()
@@ -1703,7 +1704,7 @@ async def mail_open(id: str):
     if not MAIL_ID.match(id):
         return Response(status_code=400)
     try:
-        return await asyncio.to_thread(pepito.mail.open, id)
+        return await asyncio.to_thread(assistant.mail.open, id)
     except Exception as e:
         log.info("Correo: no pude abrir %s: %s", id, e)
         return Response(f"No pude abrir el correo: {e}", status_code=502)
@@ -1715,7 +1716,7 @@ async def mail_view(id: str):
     if not MAIL_ID.match(id):
         return Response(status_code=400)
     try:
-        page = await asyncio.to_thread(pepito.mail.html, id)
+        page = await asyncio.to_thread(assistant.mail.html, id)
     except Exception as e:
         page = f"<p style='font:15px system-ui;color:#b91c1c'>No pude abrir el correo: {e}</p>"
     return HTMLResponse(page, headers={"Content-Security-Policy": MAIL_CSP, "Cache-Control": "no-store"})
@@ -1726,7 +1727,7 @@ async def mail_part(id: str, n: int, dl: int = 0):
     if not MAIL_ID.match(id):
         return Response(status_code=400)
     try:
-        data, kind, name = await asyncio.to_thread(pepito.mail.part, id, n)
+        data, kind, name = await asyncio.to_thread(assistant.mail.part, id, n)
     except Exception:
         return Response(status_code=404)
     from urllib.parse import quote
@@ -1743,25 +1744,25 @@ async def send_mail(body: dict):
     """Enviar (to, subject, text, account) o responder (reply_to = ID, text) desde el panel."""
     try:
         if body.get("reply_to"):
-            said = await asyncio.to_thread(pepito.mail.reply, str(body["reply_to"]), str(body.get("text", "")))
+            said = await asyncio.to_thread(assistant.mail.reply, str(body["reply_to"]), str(body.get("text", "")))
         else:
-            said = await asyncio.to_thread(pepito.mail.send, str(body["to"]), str(body.get("subject", "")),
+            said = await asyncio.to_thread(assistant.mail.send, str(body["to"]), str(body.get("subject", "")),
                                            str(body.get("text", "")), body.get("account"))
     except Exception as e:
         return {"ok": False, "error": str(e)}
-    pepito.spawn(pepito.check_mail())
+    assistant.spawn(assistant.check_mail())
     return {"ok": True, "message": said}
 
 
 @app.post("/api/mail/login")
 async def mail_login(body: dict):
     """Conectar una cuenta desde el panel: Charlie pega su contraseña de aplicación y se prueba en el momento."""
-    err = await asyncio.to_thread(pepito.mail.connect, str(body.get("slot", "")), str(body.get("user", "")),
+    err = await asyncio.to_thread(assistant.mail.connect, str(body.get("slot", "")), str(body.get("user", "")),
                                   str(body.get("password", "")))
     if err:
         return {"ok": False, "error": err}
-    await pepito.check_mail()
-    return {"ok": True, **pepito.mail.summary()}
+    await assistant.check_mail()
+    return {"ok": True, **assistant.mail.summary()}
 
 
 @app.post("/api/mail/apppasswords")
@@ -1772,32 +1773,32 @@ async def mail_apppasswords(body: dict):
 
 @app.post("/api/mail/check")
 async def mail_check():
-    await pepito.check_mail()
-    return pepito.mail.summary()
+    await assistant.check_mail()
+    return assistant.mail.summary()
 
 
 @app.get("/api/notices")
 async def get_notices():
-    return {"notices": pepito.notices, "quiet": settings["quiet_mode"]}
+    return {"notices": assistant.notices, "quiet": settings["quiet_mode"]}
 
 
 @app.post("/api/quiet")
 async def set_quiet(body: dict):
     settings.update({"quiet_mode": bool(body.get("on"))})
-    await pepito.broadcast({"type": "settings", "settings": settings.all()})
+    await assistant.broadcast({"type": "settings", "settings": settings.all()})
     return {"quiet": settings["quiet_mode"]}
 
 
 @app.post("/api/update")
 async def run_update():
-    pepito.spawn(pepito.auto_update())
+    assistant.spawn(assistant.auto_update())
     return {"ok": True}
 
 
 @app.get("/api/devices")
 async def get_devices():
     """Aparatos de casa: los de Spotify Connect (se les puede mandar la música) y los vistos en la red."""
-    sp = pepito.spotify
+    sp = assistant.spotify
     music = []
     if sp.connected:
         try:
@@ -1807,32 +1808,32 @@ async def get_devices():
                               "volume": d.get("volume_percent")})
         except SpotifyError:
             pass
-    return {"music": music, "lan": pepito.devices.list() if pepito.devices else [],
-            "scanned_at": pepito.devices.scanned_at if pepito.devices else 0}
+    return {"music": music, "lan": assistant.devices.list() if assistant.devices else [],
+            "scanned_at": assistant.devices.scanned_at if assistant.devices else 0}
 
 
 @app.post("/api/devices/music")
 async def music_to_device(body: dict):
     """Pasa la música de Spotify a ese aparato (por id de Spotify Connect)."""
-    sp = pepito.spotify
+    sp = assistant.spotify
     try:
         await asyncio.to_thread(sp.move_to, str(body["id"]))
     except (SpotifyError, KeyError) as e:
         return {"ok": False, "error": str(e) or "Falta el aparato"}
-    pepito.spawn(pepito._spotify_refresh(delay=1))
+    assistant.spawn(assistant._spotify_refresh(delay=1))
     return {"ok": True}
 
 
 @app.post("/api/devices/scan")
 async def scan_devices():
-    if pepito.devices:
-        await asyncio.to_thread(pepito.devices.scan)
+    if assistant.devices:
+        await asyncio.to_thread(assistant.devices.scan)
     return await get_devices()
 
 
 @app.get("/api/video")
 async def video_status():
-    player = await asyncio.to_thread(pepito._current_player)
+    player = await asyncio.to_thread(assistant._current_player)
     return await asyncio.to_thread(player.status) if player else {"playing": False}
 
 
@@ -1867,37 +1868,37 @@ async def video_control(body: dict):
     action = body.get("action")
     if action == "play" and body.get("id"):
         try:
-            await pepito.play_video(str(body["id"]), str(body.get("title", ""))[:200], body.get("rect"))
+            await assistant.play_video(str(body["id"]), str(body.get("title", ""))[:200], body.get("rect"))
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
     elif action == "rect" and isinstance(body.get("rect"), dict):
-        await asyncio.to_thread(pepito.video.set_rect, body["rect"])
-        if pepito.web.docked and await asyncio.to_thread(pepito.web.active):
-            await asyncio.to_thread(pepito.web.dock, body["rect"])
+        await asyncio.to_thread(assistant.video.set_rect, body["rect"])
+        if assistant.web.docked and await asyncio.to_thread(assistant.web.active):
+            await asyncio.to_thread(assistant.web.dock, body["rect"])
         else:
-            pepito.web.rect = body["rect"]
+            assistant.web.rect = body["rect"]
         return {"ok": True}
     elif action == "dock":
-        await asyncio.to_thread(pepito.web.dock, body.get("rect") if isinstance(body.get("rect"), dict) else None)
+        await asyncio.to_thread(assistant.web.dock, body.get("rect") if isinstance(body.get("rect"), dict) else None)
     elif action == "undock":
-        await asyncio.to_thread(pepito.web.undock)
+        await asyncio.to_thread(assistant.web.undock)
     elif action == "hide":
-        await asyncio.to_thread(pepito.web.hide)
+        await asyncio.to_thread(assistant.web.hide)
         return {"ok": True}
     elif action == "open" and body.get("url"):
         if isinstance(body.get("rect"), dict):
-            pepito.web.rect = body["rect"]
-        reason = await pepito.watch(str(body["url"]))
+            assistant.web.rect = body["rect"]
+        reason = await assistant.watch(str(body["url"]))
         if reason:
             return {"ok": False, "error": reason}
     elif action == "find" and body.get("service") and body.get("query"):   # buscar en un servicio o en cualquier web
-        ok, said = await pepito.watch_find(str(body["service"]), str(body["query"]))
+        ok, said = await assistant.watch_find(str(body["service"]), str(body["query"]))
         return {"ok": ok, "text": said}
     elif action in ("toggle", "seek", "volume", "fullscreen", "stop", "pause", "resume"):
-        player = await asyncio.to_thread(pepito._current_player)
+        player = await asyncio.to_thread(assistant._current_player)
         if player:
             await asyncio.to_thread(player.command, action, body.get("value"))
-    pepito.spawn(pepito._video_refresh())
+    assistant.spawn(assistant._video_refresh())
     return {"ok": True}
 
 
@@ -1915,7 +1916,7 @@ async def set_timer(body: dict):
         if not 0 < seconds <= 24 * 3600:
             return {"ok": False, "error": "Duración no válida"}
         timers.add(seconds, str(body.get("label", ""))[:40])
-    await pepito.broadcast({"type": "timers", "timers": timers.active()})
+    await assistant.broadcast({"type": "timers", "timers": timers.active()})
     return {"ok": True, "timers": timers.active(), "now": time.time()}
 
 
@@ -1937,7 +1938,7 @@ async def change_compra(body: dict):
             items = await asyncio.to_thread(compra.items)
     except OSError as e:
         return {"ok": False, "error": f"No pude guardar la lista: {e}"}
-    await pepito.broadcast({"type": "compra", "items": items})
+    await assistant.broadcast({"type": "compra", "items": items})
     return {"ok": True, "items": items}
 
 
@@ -2002,7 +2003,7 @@ async def edit_task(body: dict):
     if err:
         return {"ok": False, "error": err}
     log.info("Tarea desde el panel: %s", action)
-    await pepito._refresh_data()
+    await assistant._refresh_data()
     return {"ok": True, "data": await asyncio.to_thread(datos.summary)}
 
 
@@ -2059,51 +2060,35 @@ async def write_file(name: str, body: dict):
             old.unlink(missing_ok=True)
     await asyncio.to_thread(path.write_text, text, encoding="utf-8")
     log.info("Editado desde el panel: %s", file)
-    pepito.spawn(pepito._refresh_data())
+    assistant.spawn(assistant._refresh_data())
     return {"ok": True}
 
 
 @app.get("/api/camera.mjpg")
 async def camera_stream():
-    """Vídeo de la cámara con lo que detecta (solo para probar): MJPEG mientras alguien lo mire."""
-    from fastapi.responses import StreamingResponse
-    vision = pepito.vision
-
-    async def frames():
-        vision.preview_clients += 1
-        try:
-            last = None
-            while True:
-                jpg = vision.frame_jpeg() if vision else None
-                if jpg and jpg is not last:
-                    last = jpg
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
-                await asyncio.sleep(0.06)
-        finally:
-            vision.preview_clients = max(0, vision.preview_clients - 1)
-
-    return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
-                             headers={"Cache-Control": "no-store"})
+    """El vídeo de la cámara lo da Cortex Sense, que es quien la tiene abierta."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(settings["sense_url"] + "/api/camera.mjpg")
 
 
 @app.post("/api/gestures/record")
 async def record_gesture(body: dict):
     name = str(body.get("name", "")).strip()
-    if not pepito.vision or not await asyncio.to_thread(pepito.vision.record_custom, name):
+    if not assistant.vision or not await asyncio.to_thread(assistant.vision.record_custom, name):
         return {"error": "No puedo grabar ahora: ¿cámara activada y nombre sin «:»?"}
     return {"ok": True}
 
 
 @app.post("/api/gestures/delete")
 async def delete_gesture(body: dict):
-    ok = bool(pepito.vision and await asyncio.to_thread(pepito.vision.delete_custom, str(body.get("name", ""))))
-    await pepito._send_vision(force=True)
+    ok = bool(assistant.vision and await asyncio.to_thread(assistant.vision.delete_custom, str(body.get("name", ""))))
+    await assistant._send_vision(force=True)
     return {"ok": ok}
 
 
 @app.post("/api/wake/retrain")
 async def wake_retrain():
-    pepito.spawn(pepito.retrain_wake())
+    assistant.spawn(assistant.retrain_wake())
     return {"ok": True}
 
 
@@ -2121,14 +2106,14 @@ async def add_aviso(body: dict):
         await asyncio.to_thread(avisos.add, when, str(body["texto"]), str(body.get("repetir", "")))
     except ValueError as e:
         return {"error": f"No lo guardo: {e}."}
-    await pepito.broadcast_avisos()
+    await assistant.broadcast_avisos()
     return {"ok": True}
 
 
 @app.post("/api/avisos/delete")
 async def delete_aviso(body: dict):
     ok = await asyncio.to_thread(avisos.delete, str(body.get("id", "")))
-    await pepito.broadcast_avisos()
+    await assistant.broadcast_avisos()
     return {"ok": ok}
 
 
@@ -2150,7 +2135,7 @@ async def set_weather_place(body: dict):
     if not found:
         return {"error": f"No encuentro «{name}»."}
     settings.update({"weather_place": {"name": found["name"], "lat": found["latitude"], "lon": found["longitude"]}})
-    await pepito.broadcast({"type": "settings", "settings": settings.all()})
+    await assistant.broadcast({"type": "settings", "settings": settings.all()})
     return await asyncio.to_thread(weather.forecast)
 
 
@@ -2158,8 +2143,8 @@ async def set_weather_place(body: dict):
 async def test_voice(body: dict):
     lang = body.get("lang", "es")
     text = {"es": "¡Hola! Soy Cortex, tu asistente de voz. Así sueno ahora mismo.", "en": "Hi! I'm Cortex. This is how I sound."}[lang]
-    pepito._speak_lang = lang
-    pepito._queue_sentence(text)
+    assistant._speak_lang = lang
+    assistant._queue_sentence(text)
     return {"ok": True}
 
 
@@ -2172,10 +2157,10 @@ def _page(message: str) -> HTMLResponse:
 async def setup_state():
     """Qué cuentas están ya conectadas (para el asistente de configuración). Sin datos de las cuentas."""
     return {"claude": await asyncio.to_thread(claude_status),
-            "spotify": {"client_id": bool(pepito.spotify.client_id), "connected": pepito.spotify.connected,
-                        "redirect_uri": pepito.spotify.redirect_uri},
-            "email": {"connected": pepito.mail.configured},
-            "whatsapp": {"available": pepito.wa.available, "state": pepito.wa.state, "qr": bool(pepito.wa.qr)}}
+            "spotify": {"client_id": bool(assistant.spotify.client_id), "connected": assistant.spotify.connected,
+                        "redirect_uri": assistant.spotify.redirect_uri},
+            "email": {"connected": assistant.mail.configured},
+            "whatsapp": {"available": assistant.wa.available, "state": assistant.wa.state, "qr": bool(assistant.wa.qr)}}
 
 
 @app.post("/api/setup/claude")
@@ -2190,7 +2175,7 @@ async def setup_claude():
 @app.post("/api/setup/claude/start")
 async def setup_claude_start():
     """Tras iniciar sesión: arranca el cerebro sin reiniciar Cortex."""
-    pepito.spawn(pepito._start_brain())
+    assistant.spawn(assistant._start_brain())
     return {"ok": True}
 
 
@@ -2205,15 +2190,15 @@ async def setup_spotify(body: dict):
 
 @app.post("/api/setup/whatsapp")
 async def setup_whatsapp():
-    pepito.wa.start(link=True)
-    return {"ok": pepito.wa.available}
+    assistant.wa.start(link=True)
+    return {"ok": assistant.wa.available}
 
 
 @app.post("/api/quit")
 async def quit_app():
     """Cierra Cortex entero (sin consola no hay otra ventana que cerrar)."""
-    await asyncio.to_thread(pepito.brain.stop)
-    pepito.wa.stop()
+    await asyncio.to_thread(assistant.brain.stop)
+    assistant.wa.stop()
     asyncio.get_running_loop().call_later(0.3, os._exit, 0)
     return {"ok": True}
 
@@ -2221,7 +2206,7 @@ async def quit_app():
 @app.get("/spotify/login")
 async def spotify_login():
     try:
-        return RedirectResponse(pepito.spotify.login_url())
+        return RedirectResponse(assistant.spotify.login_url())
     except SpotifyError as e:
         return _page(f"{e}.")
 
@@ -2231,16 +2216,16 @@ async def spotify_callback(code: str = "", state: str = "", error: str = ""):
     if error:
         return _page(f"Spotify dijo: {error}.")
     try:
-        await asyncio.to_thread(pepito.spotify.finish_login, code, state)
+        await asyncio.to_thread(assistant.spotify.finish_login, code, state)
     except SpotifyError as e:
         return _page(f"{e}.")
-    pepito.spawn(pepito._spotify_refresh())
+    assistant.spawn(assistant._spotify_refresh())
     return RedirectResponse("/")
 
 
 @app.post("/api/spotify")
 async def spotify_command(body: dict):
-    sp = pepito.spotify
+    sp = assistant.spotify
     action, value = body.get("action"), body.get("value")
     try:
         if action == "logout":
@@ -2255,7 +2240,7 @@ async def spotify_command(body: dict):
             await asyncio.to_thread(sp.set_volume, int(value))
     except SpotifyError as e:
         return {"error": str(e)}
-    pepito.spawn(pepito._spotify_refresh(delay=0.4))
+    assistant.spawn(assistant._spotify_refresh(delay=0.4))
     return {"ok": True}
 
 
@@ -2279,8 +2264,8 @@ async def save_layout(items: list[dict]):
 
 @app.post("/api/devices/refresh")
 async def refresh_devices():
-    await asyncio.to_thread(pepito.open_devices)
-    await pepito.broadcast(pepito.status())
+    await asyncio.to_thread(assistant.open_devices)
+    await assistant.broadcast(assistant.status())
     return await get_settings()
 
 
@@ -2294,44 +2279,44 @@ async def ws_endpoint(ws: WebSocket):
         await ws.close(code=1008)
         return
     await ws.accept()
-    pepito.clients.add(ws)
-    await ws.send_json({"type": "hello", "state": pepito.state, "history": pepito.history,
+    assistant.clients.add(ws)
+    await ws.send_json({"type": "hello", "state": assistant.state, "history": assistant.history,
                         "settings": settings.all(), "web": web_version()})
-    await ws.send_json(pepito.status())
-    await ws.send_json({"type": "spotify", **pepito.spotify.summary()})
-    await ws.send_json({"type": "whatsapp", **pepito.wa.summary()})
-    await ws.send_json({"type": "mail", **pepito.mail.summary()})
-    if pepito.vision:
-        await ws.send_json({"type": "vision", **pepito.vision.state()})
+    await ws.send_json(assistant.status())
+    await ws.send_json({"type": "spotify", **assistant.spotify.summary()})
+    await ws.send_json({"type": "whatsapp", **assistant.wa.summary()})
+    await ws.send_json({"type": "mail", **assistant.mail.summary()})
+    if assistant.vision:
+        await ws.send_json({"type": "vision", **assistant.vision.state()})
     try:
         while True:
             msg = await ws.receive_json()
             action = msg.get("action")
             if action == "press":
-                await pepito.press()
+                await assistant.press()
             elif action == "stop":
-                await pepito.interrupt()
+                await assistant.interrupt()
             elif action == "text" and msg.get("text", "").strip():
-                await pepito.send_text(msg["text"])
+                await assistant.send_text(msg["text"])
             elif action == "enroll":
-                await pepito.enroll()
-            elif action == "enroll_clear" and pepito.listener:
-                await asyncio.to_thread(pepito.listener.print.clear_samples)
-                await pepito.broadcast(pepito.status())
+                await assistant.enroll()
+            elif action == "enroll_clear" and assistant.listener:
+                await asyncio.to_thread(assistant.listener.print.clear_samples)
+                await assistant.broadcast(assistant.status())
             elif action == "unmute_mic":
-                pepito.mic_mute.unmute()
+                assistant.mic_mute.unmute()
                 await asyncio.sleep(0.5)
-                await pepito.broadcast(pepito.status())
+                await assistant.broadcast(assistant.status())
             elif action == "wake_toggle":
                 settings.update({"wake_enabled": not settings["wake_enabled"]})
-                await pepito.broadcast(pepito.status())
+                await assistant.broadcast(assistant.status())
             elif action == "new_conversation":
-                await pepito.interrupt()
-                await asyncio.to_thread(pepito.brain.new_conversation)
-                pepito.history = []
-                await pepito.broadcast({"type": "cleared"})
-                await pepito.broadcast(pepito.status())
+                await assistant.interrupt()
+                await asyncio.to_thread(assistant.brain.new_conversation)
+                assistant.history = []
+                await assistant.broadcast({"type": "cleared"})
+                await assistant.broadcast(assistant.status())
     except WebSocketDisconnect:
         pass
     finally:
-        pepito.clients.discard(ws)
+        assistant.clients.discard(ws)

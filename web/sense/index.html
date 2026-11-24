@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cortex Sense</title>
+<link rel="stylesheet" href="/static/sense.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">✋</span> Cortex <b>Sense</b></div>
+  <div class="pills">
+    <span class="pill" id="pCam">camera …</span>
+    <span class="pill" id="pHub" title="Cortex Hub runs the music, voice and assistant actions">Hub …</span>
+    <label class="pill switch-pill"><input type="checkbox" id="enabled"> gestures</label>
+    <button class="ghost" id="recal">Recalibrate</button>
+  </div>
+</header>
+
+<!-- setup and calibration wizard -->
+<section class="wizard" id="wizard" hidden>
+  <div class="wcard">
+    <ol class="steps" id="steps"><li>Camera</li><li>Look</li><li>Hand</li><li>Pinch</li><li>Done</li></ol>
+    <div class="wbody">
+      <img class="wcam" id="wcam" alt="Camera preview">
+      <div class="wtext">
+        <div data-step="0">
+          <h2>Pick your camera</h2>
+          <p>Sense processes video on this computer only; nothing is uploaded. Choose the webcam you face.</p>
+          <label>Camera number <input type="number" id="wIndex" min="0" max="9" value="0"></label>
+          <p class="muted" id="wCamMsg"></p>
+        </div>
+        <div data-step="1" hidden>
+          <h2>Look at the screen</h2>
+          <p>Sit the way you usually sit and look at the middle of the screen for 3 seconds. Sense learns what
+            "looking at the screen" means for your camera position and checks light and frame rate.</p>
+        </div>
+        <div data-step="2" hidden>
+          <h2>Show your open hand</h2>
+          <p>Raise one open hand at your normal distance and keep it still for 3 seconds. Sense measures how big
+            your hand looks, so swipes need the same effort near or far from the camera.</p>
+        </div>
+        <div data-step="3" hidden>
+          <h2>Pinch a few times</h2>
+          <p>Touch thumb and index together and open them again, several times, for 4 seconds. This sets when a
+            pinch grabs a window and when it lets go.</p>
+        </div>
+        <div data-step="4" hidden>
+          <h2>Calibrated</h2>
+          <ul id="report"></ul>
+        </div>
+        <div class="progress"><i id="wProg"></i></div>
+        <div class="wbtns">
+          <button class="ghost" id="wSkip">Skip</button>
+          <button id="wNext">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="grid">
+  <section class="card live">
+    <h3>Live</h3>
+    <img id="cam" alt="Camera with detected landmarks">
+    <dl class="readout">
+      <dt>Status</dt><dd id="rStatus">—</dd>
+      <dt>Hand</dt><dd id="rHand">—</dd>
+      <dt>Last gesture</dt><dd id="rLast">—</dd>
+    </dl>
+  </section>
+
+  <section class="card map">
+    <div class="head"><h3>Gestures → commands</h3><input type="search" id="filter" placeholder="Filter"></div>
+    <p class="muted">Hub actions run in Cortex Hub when it is open; without Hub, music actions fall back to
+      the media keys. Shortcuts look like <code>ctrl+shift+m</code>; programs can be a path or a URL.</p>
+    <div id="table" class="table"></div>
+    <p class="error" id="mapErr" hidden></p>
+  </section>
+
+  <section class="card custom">
+    <h3>Your own gestures</h3>
+    <p class="muted">Hold a pose for 3 seconds; Sense learns it from your own hand (k-nearest neighbours on
+      normalised landmarks) and lists it above so you can give it a command.</p>
+    <div class="row"><input id="cName" maxlength="40" placeholder="Name, e.g. spock"><button id="cRec">Record</button></div>
+    <div class="progress"><i id="cProg"></i></div>
+    <p class="muted" id="cMsg"></p>
+  </section>
+
+  <section class="card prefs">
+    <h3>Settings</h3>
+    <label class="check"><input type="checkbox" data-k="gestures_require_look"> Only when I look at the screen</label>
+    <label class="check"><input type="checkbox" data-k="window_gestures"> Move windows by pinching (needs restart)</label>
+    <label>Hold time for poses (s) <input type="number" step="0.05" min="0.1" max="2" data-k="gesture_hold_seconds"></label>
+    <label>Pause between gestures (s) <input type="number" step="0.1" min="0.2" max="5" data-k="gesture_cooldown"></label>
+    <label>Camera number <input type="number" min="0" max="9" data-k="camera_index"></label>
+    <p class="muted" id="calib"></p>
+  </section>
+</main>
+<script src="/static/sense.js"></script>
+</body>
+</html>

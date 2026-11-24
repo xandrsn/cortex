@@ -7,7 +7,7 @@ const DEMO_ONLY_APP = "Solo en el programa de Windows: aquí se enseña la idea.
 const PHRASES = ["¿Qué tengo hoy?", "Pon un temporizador de 5 minutos", "Añade pan a la lista", "¿Qué tiempo hace?"];
 const EXAMPLES = "Prueba: «añade leche a la lista», «temporizador de 5 minutos», «apunta la tarea llamar al dentista», «recuérdame en 2 minutos beber agua», «¿qué tiempo hace?» o «modo oscuro».";
 
-// Igual que CODES en src/pepito/weather.py
+// Igual que CODES en src/hub/weather.py
 function wmo(code) {
   const at = [[0, "Despejado", "sun"], [1, "Casi despejado", "sun"], [2, "Algunas nubes", "cloud-sun"], [3, "Nublado", "cloud"],
     [48, "Niebla", "fog"], [57, "Llovizna", "drizzle"], [67, "Lluvia", "rain"], [77, "Nieve", "snow"], [82, "Chubascos", "rain"],

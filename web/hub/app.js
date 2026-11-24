@@ -61,7 +61,7 @@ const GESTURES = {
 };
 const ACTIONS = {
   none: "Nada", next: "Siguiente canción", previous: "Canción anterior", toggle: "Pausar / seguir",
-  volume_up: "Subir volumen", volume_down: "Bajar volumen", pepito: "Escuchar (como «Cortex»)",
+  volume_up: "Subir volumen", volume_down: "Bajar volumen", listen: "Escuchar (como «Cortex»)",
   stop: "Cortar al asistente (para todo)", quiet: "Callar al asistente (sigue con lo suyo)", ambient: "Modo reposo", wake_toggle: "Pausar/activar «Cortex»",
   new_chat: "Conversación nueva", theme: "Cambiar claro/oscuro",
 };

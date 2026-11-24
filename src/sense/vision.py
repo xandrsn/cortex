@@ -61,7 +61,7 @@ MOTIONS = ["swipe_left", "swipe_right", "swipe_up", "swipe_down", "flick_right",
 TWO_HANDS = ["both_palms", "both_thumbs_up", "both_thumbs_down", "both_fists", "hands_apart", "hands_together"]
 GESTURES = list(CANNED.values()) + EXTRA_POSES + MOTIONS + TWO_HANDS
 PALM = [0, 5, 9, 13, 17]
-REPEATABLE = {"volume_up", "volume_down"}   # se repiten mientras se mantiene el gesto
+REPEATABLE = {"volume_up", "volume_down", "media:volume_up", "media:volume_down"}   # se repiten mientras se mantiene el gesto
 STATIC_AFTER_SWIPE = 1.2     # s sin gestos estáticos tras deslizar (la mano sigue abierta)
 EXTRA_HOLD = {"open_palm": 0.25}   # la palma abierta suele preceder a un deslizamiento
 HAND_LINKS = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (5, 9), (9, 10), (10, 11),
@@ -580,6 +580,7 @@ class Vision:
         self.fps = 0.0
         self._face_lms = None
         self._hand_pts = None
+        self.measure = {"brightness": None, "hand_size": None, "side": None, "pinch": None}   # para la calibración
         self._jpeg: bytes | None = None
         self._last_face_t = -math.inf
         self._last_hand_t = -math.inf
@@ -651,6 +652,7 @@ class Vision:
             "progress": round(self._rec_progress(), 2) if rec else 0.0,
             "record_result": self._rec_result,
             "custom": self.list_custom(),
+            **self.measure,
         }
 
     def record_custom(self, name: str, seconds: float = 3.0) -> bool:
@@ -888,6 +890,7 @@ class Vision:
 
         now = time.monotonic()
         h, w = frame.shape[:2]
+        self.measure["brightness"] = round(float(self._prev_small.mean()), 1) if self._prev_small is not None else None
 
         if self._hands_active():
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -1013,6 +1016,10 @@ class Vision:
         labels, motions, palms, kinds = [], [], [], []
         self._hands_pts = [f[1] for f in found]
         self._hand_pts = found[0][1] if found else None
+        if found:   # muñeca → nudillo del medio, en fracción de la altura: crece cuanto más cerca está la mano
+            self.measure["hand_size"] = round(float(np.hypot(*(found[0][1][9] - found[0][1][0])) / h), 3)
+            self.measure["side"] = found[0][2]
+            self.measure["pinch"] = [round(float(v), 4) for v in (found[0][1][4] - found[0][1][8]) / (w, h)]
         for key, (i, pts, side) in zip(keys, found):
             tr = self._tracker(key)
             tr["seen"] = now

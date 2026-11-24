@@ -4,10 +4,10 @@ import math
 
 import pytest
 
-from gesture.gesture_detector import GestureDetector
-from gesture.snap_zones import build_zones, nearest_zone_id
-from pepito import router, timers, whatsapp
-from pepito.listener import find_wake
+from sense.window.gesture_detector import GestureDetector
+from sense.window.snap_zones import build_zones, nearest_zone_id
+from hub import router, timers, whatsapp
+from hub.listener import find_wake
 
 
 def _hand(finger_ratios: dict[int, float]) -> dict[int, tuple[float, float]]:

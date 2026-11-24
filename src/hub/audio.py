@@ -97,7 +97,7 @@ class WindowsMicMute:
             proc = None
             try:
                 proc = self._proc = subprocess.Popen(
-                    [sys.executable, "-m", "pepito.micmute"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    [sys.executable, "-m", "hub.micmute"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
                 for line in proc.stdout:
                     state = line.strip()

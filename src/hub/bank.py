@@ -8,7 +8,7 @@ la sesión en secrets/bank_session.json.
 Los bancos solo permiten ~4 consultas al día sin el usuario delante, así que se cachea 6 h y, aunque se
 pida refrescar, nunca se consulta más de una vez cada 10 min.
 
-Uso a mano (desde C:la carpeta del programa\\src):  python -m pepito.bank auth | resumen [--forzar] | estado
+Uso a mano (desde C:la carpeta del programa\\src):  python -m hub.bank auth | resumen [--forzar] | estado
 """
 
 import json
@@ -212,7 +212,7 @@ def finish_auth(code: str) -> dict:
 def _session() -> dict:
     s = _load(SESSION_FILE).get("session")
     if not s:
-        raise BankError("Aún no hay ningún banco conectado. Ejecuta: python -m pepito.bank auth")
+        raise BankError("Aún no hay ningún banco conectado. Ejecuta: python -m hub.bank auth")
     return s
 
 
@@ -387,7 +387,7 @@ def _cli(args: list[str]) -> int:
         elif cmd == "estado":
             print("Estado de la sesión:", session_status(), "· caduca en", consent_expires_in_days(), "días")
         else:
-            print("Uso: python -m pepito.bank auth [PAÍS] | resumen [--forzar] | estado")
+            print("Uso: python -m hub.bank auth [PAÍS] | resumen [--forzar] | estado")
             return 2
     except BankError as e:
         print("Error:", e)

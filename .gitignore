@@ -18,6 +18,8 @@ datos-local/
 wake/
 wake_cortex/
 config.yaml
+sense.yaml
+gestures/
 layout.json
 whatsapp-mcp.json
 *.pem

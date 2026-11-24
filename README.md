@@ -1,76 +1,100 @@
 # Cortex
 
-Una sola app para Windows con dos cosas:
+A personal, AI-focused side project for Windows: two small apps that work alone or together.
 
-- **Asistente de voz:** le hablas («Cortex, pon…», «Cortex, recuérdame…»); tiene un panel en el navegador.
-- **Control de ventanas con gestos:** con la webcam, pellizcas y arrastras ventanas, las encajas en mitades de pantalla, minimizas con un movimiento, maximizas con el puño abierto y activas/desactivas con la señal de paz.
+| | **Cortex Sense** | **Cortex Hub** |
+|---|---|---|
+| What | Turns webcam hand gestures into commands | Voice assistant + dashboard backed by an LLM |
+| AI | MediaPipe hand/face landmarks, rule-based + few-shot custom gesture classifier, per-user calibration | Wake word (openWakeWord + transcription), local speech-to-text (faster-whisper / onnx-asr), Silero VAD, Claude Code as the reasoning layer, neural TTS (Piper / Edge TTS) |
+| Panel | http://127.0.0.1:8766 | http://127.0.0.1:8765 |
+| Runs | `python cortex_sense.py` | `python cortex_hub.py` |
 
-Hecho por [Charlie Andersen](https://charlieandersen.vercel.app).
+Built by [Charlie Andersen](https://charlieandersen.vercel.app). Hobby project, not a product: Windows only, unsigned installers, tested by its author.
 
-## Descargar
+## How they connect
 
-Última versión: [Releases](https://github.com/xandrsn/cortex/releases) → `CortexSetup.exe`. No hace falta ser administrador; Windows puede avisar porque el instalador no está firmado.
+```
+ webcam ──► Cortex Sense ──────────── local WebSocket (ws://127.0.0.1:8766/ws) ─────────► Cortex Hub
+            landmarks → gesture        {"type":"gesture","gesture":"swipe_left",            voice, LLM, music,
+            gesture → action            "action":"next","handled_by":"hub"}                 dashboard
+            runs keys/media/apps/window ◄── {"type":"hello","role":"hub"}, settings, yield_cpu
+```
 
-1. Idioma y carpeta.
-2. Tarjetas del panel (se pueden cambiar después).
-3. Cuentas que quieres conectar. El instalador no pide contraseñas.
-4. Al abrir Cortex, un asistente te guía por cada inicio de sesión (Claude, Spotify, correo y, si va incluido, WhatsApp). Todos se pueden saltar y repetir desde Ajustes → Cerebro.
+- **Sense owns the camera and the mapping** (`sense.yaml`). Each gesture maps to one action:
+  - a Hub action (`next`, `toggle`, `listen`, `new_chat`, …), sent to Hub when it is connected;
+  - `media:<key>`, `keys:ctrl+shift+m`, `run:<program or URL>`, `window:<minimize|maximize|close|desktop|switch>` or `none`, run by Sense itself.
+- **Without Hub**, music actions fall back to the system media keys, so Sense is useful on its own.
+- **Hub without Sense** works as a voice assistant; its gesture settings are proxied to Sense when it is running.
+- One webcam reader is shared between the gesture recogniser and the pinch-and-drag window controller.
+- Only local panels may change settings: requests with a foreign `Origin` are rejected (CSRF from other websites).
 
-El panel está en http://127.0.0.1:8765. Al desinstalar se conservan tus datos y se te dice en qué carpeta están.
+## Cortex Sense
 
-## Requisitos
+- **29 gestures:** 12 static poses (thumb up, fist, victory, OK, rock, shush…), 11 motions (swipes, flicks, circles, wave, push) and 6 two-hand gestures. A gesture only fires while you look at the screen (head pose from face landmarks), after a short hold and with a cooldown.
+- **Custom gestures:** record a pose a few times from the panel; it is matched by normalised landmark distance.
+- **Calibration wizard** (first run, or *Recalibrate*), so it adapts to each webcam and person:
+  1. *Look* — measures your head pitch at the screen, room brightness and camera fps.
+  2. *Hand* — hand size in frame scales the swipe distance (closer camera → longer swipes).
+  3. *Pinch* — your own pinch range sets the grab/release thresholds for dragging windows.
+  The report warns about dark rooms and slow cameras.
+- **Window control:** pinch and drag windows, snap them to zones, minimise/maximise with gestures.
+- Video is processed on the machine and never stored or uploaded.
 
-- Windows 10/11 de 64 bits.
-- Webcam (gestos de ventanas), micrófono y altavoces (voz).
-- Para el asistente: [Claude Code](https://claude.com/claude-code) instalado y con sesión iniciada (el asistente de configuración te ayuda), y conexión a internet (voz de Edge TTS).
-- La primera vez, el reconocimiento de voz descarga su modelo.
+## Cortex Hub
 
-Para compilar desde el código: Python 3.12 o 3.13 y `requirements.txt` (ver abajo).
+- Say «Cortex…» or press the button; speech is transcribed locally, answered through Claude Code (your own account) and spoken back.
+- Dashboard cards: chat, music (Spotify / media keys), timers, shopping list, weather, mail, notices; optional WhatsApp and bank summaries.
+- Accounts are connected from a setup wizard; the installer never asks for passwords.
+- Secrets stay on the machine: `.env` next to the program and Windows Credential Manager. Nothing is bundled or committed.
 
-## Privacidad
+## Install
 
-- **La webcam se procesa en tu equipo.** MediaPipe corre localmente; los fotogramas no se guardan ni se envían.
-- **El asistente de voz tiene el micro siempre encendido** mientras espera «Cortex» y puede activarse por error. Se pausa con el botón del oído o en Ajustes → Voz.
-- **El audio** se reconoce en local. Lo que dices se envía a Claude Code (tu cuenta) para responder, y el texto de las respuestas se convierte a voz con Edge TTS (internet).
-- **WhatsApp** (opcional) usa un cliente no oficial: WhatsApp podría limitar o bloquear la cuenta. Al instalar eliges «solo leer» o «leer y escribir» (clave `whatsapp_mode`); el asistente nunca envía, solo tú desde un chat abierto. El puente escucha en `127.0.0.1:8080` sin contraseña: el permiso lo aplica Cortex, no el puente.
-- Las claves y contraseñas se guardan en tu equipo: `.env` (junto al programa) y el Administrador de credenciales de Windows para las cuentas web. No van en el instalador ni en el repositorio.
+Releases ship two installers, no admin rights needed (Windows may warn because they are unsigned):
 
-## Configuración
+- `CortexSenseSetup.exe` — webcam privacy notice, optional autostart, opens the calibration wizard.
+- `CortexHubSetup.exe` — voice assistant and dashboard.
 
-Los ajustes están en `config.yaml` junto a `Cortex.exe` (se crea al cambiarlos en el panel). Claves útiles:
+Requirements: Windows 10/11 x64; webcam for Sense; microphone and speakers plus [Claude Code](https://claude.com/claude-code) signed in for Hub.
 
-- `user_name` (o la variable `CORTEX_USER_NAME`): cómo te llama Cortex en los textos (vacío = «el usuario»).
-- `window_gestures` (true): control de ventanas con gestos.
-- `gestures_enabled` (false): gestos de la visión del asistente. Comparte webcam con el anterior, por eso viene apagado.
-- `ui_port` (8765): puerto del panel.
-- `data_dir`: carpeta de datos (por defecto `datos-local`).
-
-Claves que debes aportar tú, en un `.env` junto a `Cortex.exe` (nunca se incluyen): `SPOTIFY_CLIENT_ID` (Spotify), `EB_APP_ID`, `EB_KEY_PATH` y `EB_REDIRECT_URL` opcional (banco, Enable Banking). Sin ellas esas funciones quedan desactivadas. Las cuentas de correo se pueden conectar desde el panel.
-
-## Ejecutar desde el código y compilar
+## From source
 
 ```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\python -m pip install uv
 .\.venv\Scripts\uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 .\.venv\Scripts\python -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python -m pytest
-powershell -ExecutionPolicy Bypass -File build.ps1
+.\.venv\Scripts\python -m pytest            # unit + API tests, no webcam or mic needed
+.\.venv\Scripts\python cortex_sense.py --selftest
+.\.venv\Scripts\python cortex_hub.py --selftest
+.\.venv\Scripts\python cortex_sense.py --open   # Sense + panel
+.\.venv\Scripts\python cortex_hub.py            # Hub
+powershell -ExecutionPolicy Bypass -File build.ps1 [-Only Hub|Sense]
 ```
 
-Resultado: `dist\CortexSetup.exe`. Comprobación sin webcam ni micro: `dist\Cortex\Cortex.exe --selftest` (sin consola, el resultado va a `logs\console.log`).
-Con `-Bridge <carpeta del puente>` el instalador ofrece WhatsApp. El puente usa whatsmeow (MPL-2.0) y libsignal (GPL-3.0): revisa esas licencias antes de distribuirlo.
+Build output: `dist\CortexHubSetup.exe`, `dist\CortexSenseSetup.exe`. With `-Bridge <folder>` the Hub installer offers WhatsApp; that bridge uses whatsmeow (MPL-2.0) and libsignal (GPL-3.0), so check those licences before redistributing it.
 
-## Web y demo
+## Layout
 
-`site/` es la web (Vercel, estática). La demo es el panel real con datos inventados y sin servidor; tras cambiar `web/`, ejecuta `python site/build.py`.
+```
+cortex_sense.py   cortex_hub.py        entry points
+src/sense/        camera sharing, vision, commands, calibration, FastAPI server
+src/sense/window/ pinch-and-drag window controller
+src/hub/          assistant, speech, LLM bridge, integrations, FastAPI server, SenseLink client
+web/sense/        Sense panel          web/hub/  Hub dashboard
+site/             landing page + static demo (python site/build.py after changing web/hub)
+installer/        Inno Setup scripts   tests/    pytest + node tests
+```
 
-Desde el código: `.\.venv\Scripts\python cortex.py`.
+## Configuration
 
-## Límites conocidos
+- `sense.yaml` (next to Cortex Sense): `gesture_actions`, `gestures_require_look`, `window_gestures`, `gesture_hold_seconds`, `gesture_cooldown`, `camera_index`, calibration results.
+- `config.yaml` (next to Cortex Hub): `user_name`, `ui_port`, `sense_url`, `data_dir`, voice and model options.
+- `.env` (Hub, you provide it): `SPOTIFY_CLIENT_ID`; `EB_APP_ID`, `EB_KEY_PATH`, optional `EB_REDIRECT_URL` (Enable Banking). Without them those features stay off.
 
-- Solo Windows (Win32, pycaw, comtypes).
-- La palabra de activación es «Cortex». Se reconoce por transcripción y por sonido; el detector entrenado antes («Pepito») no sirve y no hay uno nuevo.
-- Los modelos grandes no van en el instalador: se descargan o se copian a `models\` junto al programa.
-- Spotify, banco y WhatsApp necesitan sus propias cuentas y claves; no están probados en esta build.
-- La build no se ha probado con webcam ni micrófono reales.
+## Known limits
+
+- Windows only (Win32 APIs, pycaw, comtypes).
+- The gesture runtime and calibration need a real webcam; automated tests cover the logic, API and protocol, not live video.
+- Large speech models are downloaded on first use or copied into `models\`, not bundled.
+- Spotify, bank and WhatsApp need their own accounts and keys and are the least tested parts.
+- WhatsApp support uses an unofficial client; WhatsApp may limit the account. The assistant never sends messages on its own.

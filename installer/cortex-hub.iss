@@ -1,6 +1,6 @@
-﻿; Instalador de Cortex Hub (Inno Setup 6). Lo compila build.ps1: ISCC /DAppVersion=x.y.z [/DBridge=carpeta] installer\cortex-hub.iss
-; Los gestos van aparte: installer\cortex-sense.iss. AppId es el de la versión de una sola app: actualiza encima.
-; Por usuario y sin administrador: Cortex escribe config.yaml, .env y los modelos en su propia carpeta.
+﻿; Cortex Hub installer (Inno Setup 6). Built by build.ps1: ISCC /DAppVersion=x.y.z [/DBridge=folder] installer\cortex-hub.iss
+; Gestures ship separately: installer\cortex-sense.iss. AppId is the single-app version's: it updates in place.
+; Per-user, no administrator: Cortex writes config.yaml, .env and the models in its own folder.
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -65,7 +65,7 @@ en.RunNow=Open Cortex
 es.DataKept=Cortex se ha desinstalado. Tus datos (ajustes, claves, mensajes vinculados) siguen en:%n%n%1%n%nBorra esa carpeta si no los quieres conservar.
 en.DataKept=Cortex was uninstalled. Your data (settings, keys, linked messages) is still in:%n%n%1%n%nDelete that folder if you do not want to keep it.
 es.NotStopped=No se ha podido cerrar Cortex. Ciérralo (Ajustes → Cerebro → Cerrar Cortex) y vuelve a intentarlo.
-en.NotStopped=Cortex could not be closed. Close it (Ajustes → Cerebro → Cerrar Cortex) and try again.
+en.NotStopped=Cortex could not be closed. Close it (Settings → Brain → Quit Cortex) and try again.
 
 [Tasks]
 Name: "desktop"; Description: "{cm:TaskDesktop}"
@@ -93,7 +93,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\CortexHub.exe"; Parameters: "--open"; Description: "{cm:RunNow}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; solo lo que se vuelve a descargar o a generar; los datos del usuario no se tocan
+; only what is re-downloaded or regenerated; user data is never touched
 Type: filesandordirs; Name: "{app}\models\hf"
 Type: filesandordirs; Name: "{app}\logs"
 Type: dirifempty; Name: "{app}\models"
@@ -119,7 +119,7 @@ procedure InitializeWizard;
 begin
   Ids := TStringList.Create;
   Widgets := CreateInputOptionPage(wpSelectDir, CustomMessage('WidgetsTitle'), '', CustomMessage('WidgetsText'), False, True);
-  { mismos ids que WIDGETS en web/hub/app.js (tests/test_installer.py lo comprueba) }
+  { same ids as WIDGETS in web/hub/app.js (tests/test_installer.py checks it) }
   AddWidget('today', 'Hoy', 'Today', True);
   AddWidget('tasks', 'Tareas', 'Tasks', True);
   AddWidget('avisos', 'Avisos', 'Reminders', True);
@@ -150,7 +150,7 @@ begin
   Accounts.Values[0] := True;
 end;
 
-{ Al actualizar se respetan los ajustes que ya hay }
+{ On update, existing settings are kept }
 function FirstInstall: Boolean;
 begin
   Result := not FileExists(ExpandConstant('{app}\config.yaml'));
@@ -173,7 +173,7 @@ begin
 #endif
 end;
 
-{ Solo los procesos de esta carpeta: puede haber otro puente de WhatsApp en marcha que no es de Cortex }
+{ Only processes from this folder: another WhatsApp bridge not belonging to Cortex may be running }
 function StopCortex: Boolean;
 var
   Code: Integer;

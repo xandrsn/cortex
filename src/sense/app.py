@@ -1,9 +1,9 @@
-"""Servidor de Cortex Sense en http://127.0.0.1:8766.
+"""Cortex Sense server on http://127.0.0.1:8766.
 
-- /           panel de Sense: instalación (cámara + calibración), qué hace cada gesto, gestos propios
-- /ws         eventos en vivo: {"type": "vision"|"gesture"|"presence"|"settings", ...}. Cortex Hub se conecta
-              aquí, se presenta con {"type": "hello", "role": "hub"} y recibe los gestos con acción de Hub.
-- /api/...    estado, ajustes, vídeo de la cámara, grabar/borrar gestos propios, calibrar, probar una acción
+- /           Sense panel: setup (camera + calibration), what each gesture does, custom gestures
+- /ws         live events: {"type": "vision"|"gesture"|"presence"|"settings", ...}. Cortex Hub connects
+              here, introduces itself with {"type": "hello", "role": "hub"} and receives the gestures bound to Hub actions.
+- /api/...    state, settings, camera video, record/delete custom gestures, calibrate, test an action
 """
 
 import asyncio
@@ -24,8 +24,8 @@ from .config import DEFAULTS, HUB_ACTIONS, WEB_DIR, settings
 from .vision import GESTURES, MOTIONS, TWO_HANDS, H, W, Vision
 
 log = logging.getLogger("sense")
-# Solo el panel de Sense, el de Hub y programas locales (sin Origin) pueden cambiar cosas: si no, cualquier web
-# abierta podría mandar un POST a 127.0.0.1 y asignar «run:...» a un gesto.
+# Only the Sense panel, the Hub panel and local programs (no Origin) may change things: otherwise any open
+# web page could POST to 127.0.0.1 and bind "run:..." to a gesture.
 ALLOWED_ORIGINS = {f"http://{h}:{p}" for h in ("127.0.0.1", "localhost") for p in (DEFAULTS["ui_port"], 8765)}
 
 
@@ -55,7 +55,7 @@ class Sense:
         cam = self.cams.setdefault(index, SharedCamera(index, W, H))
         return cam.reader()
 
-    # ── eventos de la visión (llegan desde su hilo) ──
+    # ── vision events (arrive from its thread) ──
     def on_gesture(self, gesture: str, action: str):
         target = commands.route(action, hub_connected=bool(self.hubs))
         self._emit({"type": "gesture", "gesture": gesture, "action": action, "handled_by": target and
@@ -64,7 +64,7 @@ class Sense:
             try:
                 commands.run(target)
             except Exception:
-                log.exception("No se pudo ejecutar %s", target)
+                log.exception("Could not run %s", target)
 
     def on_presence(self, engaged: bool):
         self._emit({"type": "presence", "engaged": engaged})
@@ -85,7 +85,7 @@ class Sense:
         return {**self.vision.state(), "hub_connected": bool(self.hubs), "calibrating": self.calibrating}
 
     async def pump(self):
-        """Estado de la cámara a los clientes: rápido si alguien mira el vídeo, si no cuando cambia."""
+        """Camera state to the clients: fast if someone is watching the video, otherwise only when it changes."""
         while True:
             await asyncio.sleep(0.3 if self.vision.preview_clients or self.calibrating else 1.0)
             if not self.clients:
@@ -118,7 +118,7 @@ app.mount("/static", StaticFiles(directory=WEB_DIR, check_dir=False), name="stat
 @app.middleware("http")
 async def same_origin_only(request: Request, call_next):
     if request.method != "GET" and not origin_ok(request.headers.get("origin")):
-        return JSONResponse({"error": "origen no permitido"}, status_code=403)
+        return JSONResponse({"error": "origin not allowed"}, status_code=403)
     return await call_next(request)
 
 
@@ -148,7 +148,7 @@ async def post_settings(body: dict):
     for gid, action in (body.get("gesture_actions") or {}).items():
         if err := commands.validate(action):
             return {"error": f"{gid}: {err}"}
-    if "gesture_actions" in body:   # se mezcla: Hub manda solo las que conoce
+    if "gesture_actions" in body:   # merged: Hub only sends the ones it knows
         body["gesture_actions"] = {**settings["gesture_actions"], **body["gesture_actions"]}
     data = await asyncio.to_thread(settings.update, body)
     await sense.broadcast({"type": "settings", "settings": data})
@@ -194,7 +194,7 @@ async def camera_stream():
 async def record_gesture(body: dict):
     name = str(body.get("name", "")).strip()
     if not await asyncio.to_thread(sense.vision.record_custom, name, float(body.get("seconds", 3))):
-        return {"error": "No puedo grabar ahora: ¿cámara activada y nombre sin «:»?"}
+        return {"error": "Cannot record now: is the camera on and the name free of \":\"?"}
     return {"ok": True}
 
 
@@ -202,7 +202,7 @@ async def record_gesture(body: dict):
 async def delete_gesture(body: dict):
     name = str(body.get("name", ""))
     ok = await asyncio.to_thread(sense.vision.delete_custom, name)
-    if ok:   # la acción del gesto borrado tampoco se queda colgando
+    if ok:   # the deleted gesture's action must not linger either
         actions = {k: v for k, v in settings["gesture_actions"].items() if k != f"custom:{name}"}
         await asyncio.to_thread(settings.update, {"gesture_actions": actions})
     return {"ok": ok}
@@ -210,12 +210,12 @@ async def delete_gesture(body: dict):
 
 @app.post("/api/calibrate")
 async def calibrate(body: dict):
-    """Un paso de la calibración: guarda muestras del estado durante `seconds` y devuelve cuántas."""
+    """One calibration step: collects state samples for `seconds` and returns how many."""
     step = str(body.get("step", ""))
     if step not in calibration.STEPS:
-        return {"error": f"paso desconocido: {step}"}
+        return {"error": f"unknown step: {step}"}
     if sense.calibrating:
-        return {"error": "ya estoy calibrando"}
+        return {"error": "already calibrating"}
     seconds = min(10.0, max(1.0, float(body.get("seconds", 4))))
     sense.calibrating, got = step, []
     try:
@@ -254,7 +254,7 @@ async def ws_endpoint(ws: WebSocket):
             if msg.get("type") == "hello" and msg.get("role") == "hub":
                 sense.hubs.add(ws)
                 log.info("Cortex Hub conectado")
-            elif msg.get("type") == "yield_cpu":   # Hub está transcribiendo: la CPU, para eso
+            elif msg.get("type") == "yield_cpu":   # Hub is transcribing: give it the CPU
                 sense.vision.yield_cpu = bool(msg.get("on"))
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass

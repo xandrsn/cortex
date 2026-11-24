@@ -1,4 +1,4 @@
-"""La demo web: copia del panel al día y lógica (con node, sin abrir ningún navegador)."""
+"""The web demo: panel copy up to date, and logic (with node, without opening any browser)."""
 
 import importlib.util
 import shutil

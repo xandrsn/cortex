@@ -1,9 +1,9 @@
-"""Entrada y salida de audio con WASAPI.
+"""Audio input and output with WASAPI.
 
-- Player: un OutputStream persistente al que se le encolan trozos de audio. Al estar siempre abierto,
-  el Echo por Bluetooth no se duerme y no se come las primeras sílabas.
-- Mic: un InputStream persistente que reparte bloques de 16 kHz mono a quien escuche (el oído).
-  Mientras Cortex habla, el micro se ignora para que no se escuche a sí mismo.
+- Player: a persistent OutputStream that audio chunks are queued onto. Being always open, a Bluetooth
+  Echo does not fall asleep and does not swallow the first syllables.
+- Mic: a persistent InputStream that hands 16 kHz mono blocks to whoever listens (the listener).
+  While Cortex speaks the mic is ignored so it does not hear itself.
 """
 
 import logging
@@ -24,11 +24,11 @@ def _wasapi_index() -> int:
     for i, api in enumerate(sd.query_hostapis()):
         if api["name"] == "Windows WASAPI":
             return i
-    raise RuntimeError("WASAPI no disponible")
+    raise RuntimeError("WASAPI not available")
 
 
 def refresh_devices() -> None:
-    """PortAudio no se entera de dispositivos nuevos (Bluetooth) sin reiniciarse."""
+    """PortAudio does not notice new devices (Bluetooth) without restarting."""
     sd._terminate()
     sd._initialize()
 
@@ -39,7 +39,7 @@ def list_devices() -> dict:
     for d in sd.query_devices():
         if d["hostapi"] != api:
             continue
-        # los micros manos libres Bluetooth no sirven (calidad de teléfono): ni se ofrecen
+        # Bluetooth hands-free mics are no good (phone quality): they are not even offered
         if d["max_input_channels"] > 0 and not _is_handsfree(d["name"]):
             inputs.append(d["name"])
         if d["max_output_channels"] > 0:
@@ -48,7 +48,7 @@ def list_devices() -> dict:
 
 
 def resolve_device(name: str | None, kind: str) -> int:
-    """Índice WASAPI del dispositivo con ese nombre, o el predeterminado si no está."""
+    """WASAPI index of the device with that name, or the default if it is missing."""
     api = _wasapi_index()
     if kind == "input" and name and _is_handsfree(name):
         name = None
@@ -57,12 +57,12 @@ def resolve_device(name: str | None, kind: str) -> int:
             channels = d["max_input_channels"] if kind == "input" else d["max_output_channels"]
             if d["hostapi"] == api and channels > 0 and d["name"] == name:
                 return i
-        log.warning("Dispositivo %r no encontrado, uso el predeterminado", name)
+        log.warning("Device %r not found, using the default", name)
     key = "default_input_device" if kind == "input" else "default_output_device"
     default = sd.query_hostapis(api)[key]
     if kind == "input" and _is_handsfree(sd.query_devices(default)["name"]):
-        # Los micros manos libres Bluetooth graban como un teléfono y además ponen el altavoz en
-        # calidad de llamada: mejor el micro del portátil si lo hay.
+        # Bluetooth hands-free mics record like a phone and also drop the speaker to call quality:
+        # better to use the laptop mic if there is one.
         for i, d in enumerate(sd.query_devices()):
             if d["hostapi"] == api and d["max_input_channels"] > 0 and not _is_handsfree(d["name"]):
                 return i
@@ -74,11 +74,11 @@ def _is_handsfree(name: str) -> bool:
 
 
 class WindowsMicMute:
-    """Vigila si Windows tiene el micro silenciado y permite reactivarlo (vía el proceso micmute)."""
+    """Watches whether Windows has the mic muted and allows unmuting it (via the micmute process)."""
 
     def __init__(self):
         self.muted: bool | None = None
-        self.outputs: str | None = None   # altavoces activos en Windows (cambia al conectar/desconectar)
+        self.outputs: str | None = None   # active speakers in Windows (changes when connecting/disconnecting)
         self._proc = None
         threading.Thread(target=self._run, daemon=True, name="mic-mute").start()
 
@@ -87,7 +87,7 @@ class WindowsMicMute:
             self._proc.stdin.write(b"unmute\n")
             self._proc.stdin.flush()
         except Exception as e:
-            log.warning("No puedo reactivar el micro: %s", e)
+            log.warning("Cannot unmute the mic: %s", e)
 
     def _run(self) -> None:
         import subprocess
@@ -106,9 +106,9 @@ class WindowsMicMute:
                         continue
                     self.muted = {b"1": True, b"0": False}.get(state)
             except Exception as e:
-                log.warning("Fallo vigilando el micro de Windows: %s", e)
+                log.warning("Failed while watching the Windows mic: %s", e)
             finally:
-                # si el proceso muere se relanza; sin cerrar sus tuberías se perderían handles en cada vuelta
+                # if the process dies it is relaunched; without closing its pipes handles would leak on every loop
                 if proc is not None:
                     for pipe in (proc.stdin, proc.stdout):
                         try:
@@ -133,10 +133,10 @@ def resample(audio: np.ndarray, src: int, dst: int) -> np.ndarray:
 
 
 class StreamResampler:
-    """Cambio de frecuencia en continuo y con filtro (polifase): sin los agudos falsos de la interpolación
-    lineal al subir (24 kHz de Edge → 48 kHz del altavoz) ni el ruido que se cuela al bajar sin filtrar
-    (48 kHz del micro → 16 kHz de Parakeet). Guarda el estado entre trozos: sin saltos en las uniones.
-    Vale para cualquier pareja de frecuencias (también 44,1 kHz de muchos altavoces Bluetooth)."""
+    """Continuous, filtered (polyphase) sample-rate conversion: no false treble from linear interpolation
+    when upsampling (Edge 24 kHz -> 48 kHz speaker) and no noise leaking in when downsampling unfiltered
+    (48 kHz mic -> 16 kHz Parakeet). Keeps state between chunks: no jumps at the seams.
+    Works for any pair of rates (including the 44.1 kHz of many Bluetooth speakers)."""
 
     def __init__(self, src: int, dst: int):
         from math import gcd
@@ -147,7 +147,7 @@ class StreamResampler:
             return
         n = 24 * max(self.up, self.down) + 1
         h = firwin(n, 0.95 / max(self.up, self.down), window=("kaiser", 7.0)) * self.up
-        self.k = -(-n // self.up)   # coeficientes por fase
+        self.k = -(-n // self.up)   # coefficients per phase
         h = np.concatenate([h, np.zeros(self.k * self.up - n)])
         self.taps = h.reshape(self.k, self.up).T.astype(np.float32)   # taps[r, j] = h[r + j·up]
         self.reset()
@@ -155,21 +155,21 @@ class StreamResampler:
     def reset(self) -> None:
         if self.src != self.dst:
             self.hist = np.zeros(self.k - 1, dtype=np.float32)
-            self.n_in = 0      # muestras de entrada ya recibidas
-            self.m_next = 0    # siguiente muestra de salida
+            self.n_in = 0      # input samples already received
+            self.m_next = 0    # next output sample
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=np.float32)
         if self.src == self.dst or len(x) == 0:
             return x if self.src == self.dst else np.zeros(0, dtype=np.float32)
-        if len(x) > 4096:   # a bocados: cada uno suelta pronto el GIL y el hilo del audio no se retrasa
+        if len(x) > 4096:   # in bites: each one releases the GIL soon so the audio thread does not lag
             return np.concatenate([self(x[i:i + 4096]) for i in range(0, len(x), 4096)])
         b = np.concatenate([self.hist, x])
         total = self.n_in + len(x)
         m_last = (total * self.up - 1) // self.down
         m = np.arange(self.m_next, m_last + 1, dtype=np.int64)
         p = m * self.down
-        li = p // self.up - (self.n_in - (self.k - 1))          # posición en b de la muestra más reciente
+        li = p // self.up - (self.n_in - (self.k - 1))          # position in b of the most recent sample
         idx = li[:, None] - np.arange(self.k)[None, :]
         out = np.einsum("mj,mj->m", b[idx], self.taps[p % self.up])
         self.hist = b[len(b) - (self.k - 1):] if self.k > 1 else np.zeros(0, dtype=np.float32)
@@ -187,7 +187,7 @@ class Player:
         self.rate = 48000
         self.device_name = None
         self.ok = False
-        self._rs: dict[int, StreamResampler] = {}   # uno por frecuencia de origen (Edge 24 kHz, Piper 22 kHz)
+        self._rs: dict[int, StreamResampler] = {}   # one per source rate (Edge 24 kHz, Piper 22 kHz)
 
     def open(self, device_name: str | None) -> None:
         self.close()
@@ -200,7 +200,7 @@ class Player:
                                        callback=self._callback, blocksize=int(self.rate * 0.02))
         self._stream.start()
         self.ok = True
-        log.info("Salida de audio: %s @ %d Hz", self.device_name, self.rate)
+        log.info("Audio output: %s @ %d Hz", self.device_name, self.rate)
 
     def close(self) -> None:
         if self._stream is not None:
@@ -228,9 +228,9 @@ class Player:
         out[filled:] = 0
 
     def play(self, audio: np.ndarray, rate: int, mutes_mic: bool = True) -> float:
-        """Encola audio y devuelve su duración en segundos.
+        """Queue audio and return its duration in seconds.
 
-        mutes_mic=False para sonidos cortos (el pitido) que no deben cortar lo que el usuario dice.
+        mutes_mic=False for short sounds (the chime) that must not cut off what the user is saying.
         """
         rs = self._rs.get(rate)
         if rs is None or rs.dst != self.rate:
@@ -240,7 +240,7 @@ class Player:
         return len(data) / self.rate
 
     def busy(self) -> bool:
-        """¿Está sonando algo que deba silenciar el micro?"""
+        """Is something playing that should mute the mic?"""
         with self._lock:
             if len(self._current) > 0 and self._current_mutes:
                 return True
@@ -252,11 +252,11 @@ class Player:
             while not self._queue.empty():
                 self._queue.get_nowait()
         for rs in self._rs.values():
-            rs.reset()   # lo cortado no debe colarse al principio de lo siguiente
+            rs.reset()   # what was cut off must not leak into the start of the next audio
 
 
 def chime(rate: int = 48000, up: bool = True) -> np.ndarray:
-    """Pitido suave de dos notas (sube al activarse, baja al cancelar)."""
+    """Soft two-note chime (rises on activation, falls on cancel)."""
     notes = (880.0, 1320.0) if up else (1100.0, 740.0)
     parts = []
     for f in notes:
@@ -285,13 +285,13 @@ class Mic:
         self._rate = int(info["default_samplerate"])
         self._rs = StreamResampler(self._rate, MIC_RATE)
         self.device_name = info["name"]
-        # Con WASAPI hay micros (p. ej. los arrays de 2 canales) que dan silencio si se abren en mono
+        # With WASAPI some mics (e.g. 2-channel arrays) give silence if opened in mono
         channels = max(1, min(int(info["max_input_channels"]), 2))
         self._stream = sd.InputStream(device=idx, samplerate=self._rate, channels=channels, dtype="float32",
                                       blocksize=int(self._rate * BLOCK_SECONDS), callback=self._callback)
         self._stream.start()
         self.ok = True
-        log.info("Micro: %s @ %d Hz", self.device_name, self._rate)
+        log.info("Mic: %s @ %d Hz", self.device_name, self._rate)
 
     def close(self) -> None:
         if self._stream is not None:
@@ -314,7 +314,7 @@ class Mic:
                 q.put(block)
 
     def subscribe(self, raw: bool = False) -> queue.Queue:
-        """raw=True: recibe el audio también con el micro silenciado (para oír si le interrumpes)."""
+        """raw=True: also receives audio while the mic is muted (to hear if you interrupt it)."""
         q: queue.Queue = queue.Queue()
         with self._lock:
             (self._raw if raw else self._listeners).append(q)

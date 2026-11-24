@@ -1,10 +1,10 @@
-"""Transcripción local, limitada a español e inglés.
+"""Local transcription, limited to Spanish and English.
 
-- parakeet (predeterminado): NVIDIA Parakeet TDT 0.6b v3 en ONNX int8. Procesa solo el audio que hay
-  (Whisper siempre codifica 30 s), así que en CPU es ~10 veces más rápido. No dice el idioma; se
-  deduce del texto.
-- whisper-small / whisper-base: alternativa. Una sola pasada del codificador para detectar idioma y
-  transcribir.
+- parakeet (default): NVIDIA Parakeet TDT 0.6b v3 in ONNX int8. Processes only the audio there is
+  (Whisper always encodes 30 s), so on CPU it is ~10 times faster. It does not report the language; it is
+  inferred from the text.
+- whisper-small / whisper-base: alternative. A single encoder pass to detect the language and
+  transcribe.
 """
 
 import logging
@@ -20,10 +20,10 @@ from .config import LOGS_DIR, MODELS_DIR
 log = logging.getLogger("stt")
 
 MODELS = ["parakeet", "whisper-small", "whisper-base"]
-LANGS = ("es",)   # solo español: el multidioma no era fiable
+LANGS = ("es",)   # Spanish only: multilingual was not reliable
 WHISPER_VOCAB = " Cortex, Betis, Spotify, playlist, gym."
 
-# Lo que más suele oír mal, corregido a mano
+# What it most often mishears, fixed by hand
 FIXES = [
     (re.compile(r"\b(bettis|vetis|betty's|bettys|betis)\b", re.I), "Betis"),
     (re.compile(r"\b(spotyfi|spotifai)\b", re.I), "Spotify"),
@@ -66,7 +66,7 @@ KEEP_CLIPS = 20
 
 
 def normalize(audio: np.ndarray, peak: float = 0.9) -> np.ndarray:
-    """Sube el volumen hasta un pico fijo (el micro del portátil llega flojo y desde lejos)."""
+    """Raise the volume to a fixed peak (the laptop mic is quiet and far away)."""
     top = float(np.abs(audio).max()) if len(audio) else 0.0
     if top < 1e-4:
         return audio
@@ -79,7 +79,7 @@ HALLUCINATIONS = re.compile(
 
 
 def suspicious(text: str, seconds: float) -> bool:
-    """¿Parece que Parakeet no ha entendido? Vacío, o una muletilla suelta para un audio largo."""
+    """Does it look like Parakeet did not understand? Empty, or a lone filler for long audio."""
     words = re.findall(r"\w+", text)
     if not words:
         return True
@@ -88,7 +88,7 @@ def suspicious(text: str, seconds: float) -> bool:
 
 
 def save_clip(audio: np.ndarray, text: str) -> None:
-    """Guarda en local las últimas órdenes dichas a Cortex, para poder revisar qué entiende mal."""
+    """Save the latest commands said to Cortex locally, to review what it misunderstands."""
     try:
         CLIPS_DIR.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -102,7 +102,7 @@ def save_clip(audio: np.ndarray, text: str) -> None:
             old.unlink(missing_ok=True)
             old.with_suffix(".txt").unlink(missing_ok=True)
     except OSError as e:
-        log.warning("No pude guardar el audio: %s", e)
+        log.warning("Could not save the audio: %s", e)
 
 
 class Transcriber:
@@ -110,7 +110,7 @@ class Transcriber:
         self._model = None
         self._name = None
         self._lock = threading.Lock()
-        self._backup = None   # Whisper de respaldo para cuando Parakeet no entiende
+        self._backup = None   # backup Whisper for when Parakeet does not understand
 
     def load(self, name: str) -> None:
         if name not in MODELS:
@@ -118,10 +118,10 @@ class Transcriber:
         with self._lock:
             if name == self._name:
                 return
-            log.info("Cargando %s", name)
+            log.info("Loading %s", name)
             if name == "parakeet":
                 import onnx_asr
-                local = MODELS_DIR / "parakeet"   # sin copia local se descarga a la caché de Hugging Face (y se reanuda)
+                local = MODELS_DIR / "parakeet"   # without a local copy it downloads to the Hugging Face cache (and resumes)
                 self._model = onnx_asr.load_model("nemo-parakeet-tdt-0.6b-v3", local if local.exists() else None,
                                                   quantization="int8")
             else:
@@ -130,14 +130,14 @@ class Transcriber:
                               download_root=str(MODELS_DIR / "whisper"))
                 size = name.split("-", 1)[1]
                 try:
-                    # sin red si ya está descargado: arranca aunque no haya internet
+                    # offline if already downloaded: starts even without internet
                     self._model = WhisperModel(size, local_files_only=True, **kwargs)
                 except Exception:
                     self._model = WhisperModel(size, **kwargs)
             self._name = name
 
     def transcribe(self, audio: np.ndarray, default_lang: str = "es") -> tuple[str, str]:
-        """Devuelve (texto, idioma)."""
+        """Returns (text, language)."""
         with self._lock:
             if self._name == "parakeet":
                 text = fix_text(self._model.recognize(audio.astype(np.float32), sample_rate=16000))
@@ -146,12 +146,12 @@ class Transcriber:
             return fix_text(text), lang
 
     def transcribe_command(self, audio: np.ndarray, default_lang: str = "es", save: bool = True) -> tuple[str, str]:
-        """Para órdenes: normaliza y transcribe. (Sin Whisper de respaldo: tardaba 5-20 s y se inventaba frases.)"""
+        """For commands: normalize and transcribe. (No backup Whisper: it took 5-20 s and invented sentences.)"""
         audio = normalize(audio)
         text, lang = self.transcribe(audio, default_lang)
         if not text.strip() and len(audio) > 0.6 * 16000:
-            # Parakeet a veces devuelve nada si la voz empieza o acaba de golpe (p. ej. con música de fondo):
-            # con medio segundo de silencio alrededor sí lo entiende
+            # Parakeet sometimes returns nothing if the voice starts or ends abruptly (e.g. with background music):
+            # with half a second of silence around it, it does understand
             pad = np.zeros(8000, dtype=np.float32)
             text, lang = self.transcribe(np.concatenate([pad, audio, pad]), default_lang)
         if save:

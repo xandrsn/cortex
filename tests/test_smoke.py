@@ -1,4 +1,4 @@
-"""Comprobaciones rápidas de Cortex (sin webcam ni micro): python -m pytest -q"""
+"""Quick Cortex checks (no webcam or mic): python -m pytest -q"""
 
 import sys
 import unittest
@@ -14,12 +14,12 @@ class CortexSmoke(unittest.TestCase):
         from hub import config
         self.assertEqual(config.ROOT, ROOT)
         self.assertTrue((config.WEB_DIR / "index.html").exists())
-        self.assertNotIn("camera_index", config.DEFAULTS)   # la cámara es de Sense
-        self.assertIsNotNone(find_spec("hub.app"))   # no se importa: importarlo arranca el asistente
+        self.assertNotIn("camera_index", config.DEFAULTS)   # the camera belongs to Sense
+        self.assertIsNotNone(find_spec("hub.app"))   # not imported: importing it starts the assistant
 
     def test_sense_imports_and_defaults(self):
         from sense import config
-        from sense.window import hand_tracker  # noqa: F401  (window.main abre pygame al usarse: no se importa)
+        from sense.window import hand_tracker  # noqa: F401  (window.main opens pygame on use: not imported)
         self.assertEqual(config.ROOT, ROOT)
         self.assertTrue((config.WEB_DIR / "index.html").exists())
         self.assertTrue((ROOT / "src" / "sense" / "window" / "hand_landmarker.task").exists())

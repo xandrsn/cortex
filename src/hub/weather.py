@@ -1,4 +1,4 @@
-"""El tiempo para el panel, de Open-Meteo (gratis y sin clave). Se cachea 15 minutos."""
+"""Weather for the panel, from Open-Meteo (free, no key). Cached for 15 minutes."""
 
 import logging
 import time
@@ -10,18 +10,18 @@ from .config import settings
 log = logging.getLogger("weather")
 
 URL = "https://api.open-meteo.com/v1/forecast"
-# Códigos WMO → (texto, icono)
+# WMO codes -> (text, icon)
 CODES = {
-    0: ("Despejado", "sun"), 1: ("Casi despejado", "sun"), 2: ("Algunas nubes", "cloud-sun"), 3: ("Nublado", "cloud"),
-    45: ("Niebla", "fog"), 48: ("Niebla", "fog"),
-    51: ("Llovizna", "drizzle"), 53: ("Llovizna", "drizzle"), 55: ("Llovizna", "drizzle"),
-    56: ("Llovizna helada", "drizzle"), 57: ("Llovizna helada", "drizzle"),
-    61: ("Lluvia débil", "rain"), 63: ("Lluvia", "rain"), 65: ("Lluvia fuerte", "rain"),
-    66: ("Lluvia helada", "rain"), 67: ("Lluvia helada", "rain"),
-    71: ("Nieve débil", "snow"), 73: ("Nieve", "snow"), 75: ("Nieve fuerte", "snow"), 77: ("Nieve", "snow"),
-    80: ("Chubascos", "rain"), 81: ("Chubascos", "rain"), 82: ("Chubascos fuertes", "rain"),
-    85: ("Chubascos de nieve", "snow"), 86: ("Chubascos de nieve", "snow"),
-    95: ("Tormenta", "storm"), 96: ("Tormenta con granizo", "storm"), 99: ("Tormenta con granizo", "storm"),
+    0: ("Clear", "sun"), 1: ("Mostly clear", "sun"), 2: ("Partly cloudy", "cloud-sun"), 3: ("Overcast", "cloud"),
+    45: ("Fog", "fog"), 48: ("Fog", "fog"),
+    51: ("Drizzle", "drizzle"), 53: ("Drizzle", "drizzle"), 55: ("Drizzle", "drizzle"),
+    56: ("Freezing drizzle", "drizzle"), 57: ("Freezing drizzle", "drizzle"),
+    61: ("Light rain", "rain"), 63: ("Rain", "rain"), 65: ("Heavy rain", "rain"),
+    66: ("Freezing rain", "rain"), 67: ("Freezing rain", "rain"),
+    71: ("Light snow", "snow"), 73: ("Snow", "snow"), 75: ("Heavy snow", "snow"), 77: ("Snow", "snow"),
+    80: ("Showers", "rain"), 81: ("Showers", "rain"), 82: ("Heavy showers", "rain"),
+    85: ("Snow showers", "snow"), 86: ("Snow showers", "snow"),
+    95: ("Thunderstorm", "storm"), 96: ("Thunderstorm with hail", "storm"), 99: ("Thunderstorm with hail", "storm"),
 }
 
 _cache: dict = {}
@@ -42,7 +42,7 @@ def forecast() -> dict:
         r.raise_for_status()
         d = r.json()
     except Exception as e:
-        log.warning("No pude leer el tiempo: %s", e)
+        log.warning("Could not read the weather: %s", e)
         return _cache.get("data") or {"ok": False}
     cur = d["current"]
     now_hour = cur["time"][:13]

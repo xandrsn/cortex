@@ -1,8 +1,8 @@
-"""Acción de un gesto → lo que pasa en el PC.
+"""A gesture's action → what happens on the PC.
 
-Tipos: una acción de Hub (config.HUB_ACTIONS), "media:<tecla>", "keys:ctrl+shift+m", "run:<programa o URL>",
-"window:<minimize|maximize|close|desktop|switch>" o "none". Sin Hub conectado, las de música van a las teclas
-multimedia de Windows (sirven con Spotify, el navegador, etc.).
+Types: a Hub action (config.HUB_ACTIONS), "media:<key>", "keys:ctrl+shift+m", "run:<program or URL>",
+"window:<minimize|maximize|close|desktop|switch>" or "none". Without Hub connected, the music ones go to the Windows
+media keys (they work with Spotify, the browser, etc.).
 """
 
 import logging
@@ -26,7 +26,7 @@ WINDOW = ["minimize", "maximize", "close", "desktop", "switch"]
 
 
 def parse_keys(combo: str) -> list[int]:
-    """"ctrl+shift+m" → códigos de tecla virtual de Windows. ValueError si alguna tecla no existe."""
+    """"ctrl+shift+m" → Windows virtual-key codes. ValueError if any key does not exist."""
     vks = []
     for part in combo.lower().replace(" ", "").split("+"):
         if part in NAMED:
@@ -36,33 +36,33 @@ def parse_keys(combo: str) -> list[int]:
         elif part[:1] == "f" and part[1:].isdigit() and 1 <= int(part[1:]) <= 24:
             vks.append(0x6F + int(part[1:]))
         else:
-            raise ValueError(f"tecla desconocida: {part!r}")
+            raise ValueError(f"unknown key: {part!r}")
     return vks
 
 
 def validate(action: str) -> str | None:
-    """None si la acción vale; si no, por qué. El servidor lo mira antes de guardar un ajuste."""
+    """None if the action is valid; otherwise why not. The server checks it before saving a setting."""
     action = str(action)
     kind, _, arg = action.partition(":")
     if action in ("none", "") or action in HUB_ACTIONS:
         return None
     if kind == "media":
-        return None if arg in MEDIA else f"tecla multimedia desconocida: {arg}"
+        return None if arg in MEDIA else f"unknown media key: {arg}"
     if kind == "window":
-        return None if arg in WINDOW else f"acción de ventana desconocida: {arg}"
+        return None if arg in WINDOW else f"unknown window action: {arg}"
     if kind == "run":
-        return None if arg.strip() else "falta el programa"
+        return None if arg.strip() else "missing program"
     if kind == "keys":
         try:
             parse_keys(arg)
             return None
         except ValueError as e:
             return str(e)
-    return f"acción desconocida: {action}"
+    return f"unknown action: {action}"
 
 
 def route(action: str, hub_connected: bool) -> str | None:
-    """Qué hace Sense con la acción: "hub" (se la manda a Hub), una acción local, o None (nada)."""
+    """What Sense does with the action: "hub" (sends it to Hub), a local action, or None (nothing)."""
     if not action or action == "none":
         return None
     if action in HUB_ACTIONS:
@@ -91,17 +91,17 @@ def _window(op: str) -> None:
     if not hwnd:
         return
     if op == "close":
-        u.PostMessageW(hwnd, 0x0010, 0, 0)   # WM_CLOSE: la app aún puede preguntar si guardar
+        u.PostMessageW(hwnd, 0x0010, 0, 0)   # WM_CLOSE: the app can still ask to save
     else:
         u.ShowWindow(hwnd, 6 if op == "minimize" else 3)   # SW_MINIMIZE / SW_MAXIMIZE
 
 
 def run(action: str) -> bool:
-    """Ejecuta una acción local. False si no es local o no vale."""
+    """Run a local action. False if it is not local or not valid."""
     if validate(action) or action in HUB_ACTIONS or action in ("none", ""):
         return False
     if sys.platform != "win32":
-        log.warning("Las acciones locales solo funcionan en Windows: %s", action)
+        log.warning("Local actions only work on Windows: %s", action)
         return False
     kind, _, arg = action.partition(":")
     if kind == "media":
@@ -111,6 +111,6 @@ def run(action: str) -> bool:
     elif kind == "window":
         _window(arg)
     elif kind == "run":
-        os.startfile(arg.strip())   # programa, archivo o URL, como en Ejecutar de Windows
-    log.info("Acción %s", action)
+        os.startfile(arg.strip())   # program, file or URL, like Windows Run
+    log.info("Action %s", action)
     return True

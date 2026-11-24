@@ -1,11 +1,11 @@
-"""Síntesis de voz: voces neuronales de Edge y Piper local como respaldo.
+"""Speech synthesis: Edge neural voices with local Piper as a fallback.
 
-El audio de Edge llega en MP3 por trozos; se va decodificando y entregando para que Cortex empiece a
-hablar antes de que la frase esté entera.
+Edge audio arrives as MP3 in chunks; it is decoded and delivered as it comes so Cortex starts
+speaking before the sentence is complete.
 
-Abrir la conexión con Microsoft es casi todo el retraso (~0,5 s de ~0,6 s por frase), así que se deja abierta
-entre frases y se abre de antemano en cuanto Charlie empieza a hablar (warm()): con ella lista, el primer
-audio llega en ~0,15 s. El servidor la cierra tras ~1 min sin uso; si falla, se reintenta con una nueva.
+Opening the connection to Microsoft is almost all of the delay (~0.5 s of ~0.6 s per sentence), so it is kept open
+between sentences and opened in advance as soon as the user starts talking (warm()): with it ready, the first
+audio arrives in ~0.15 s. The server closes it after ~1 min idle; if it fails, a new one is tried.
 """
 
 import asyncio
@@ -30,12 +30,12 @@ from .config import MODELS_DIR, settings
 log = logging.getLogger("tts")
 
 EDGE_RATE = 24000
-FIRST_BYTES = 4000       # el primer bloque que manda Edge (~4300 B, 0,7 s de audio): se empieza con él
-HOLD_BACK = 1152 * 2     # muestras que se guardan por si el siguiente trozo de MP3 las retoca
+FIRST_BYTES = 4000       # the first block Edge sends (~4300 B, 0.7 s of audio): start with it
+HOLD_BACK = 1152 * 2     # samples held back in case the next MP3 chunk alters them
 
-HEDGE_S = 0.7            # sin audio en este tiempo, se pide también por otra conexión
-TOTAL_S = 6              # sin audio de ninguna en este tiempo: Piper
-KEEP_S = 25              # tras esto sin usarla, la conexión no se reutiliza (el servidor corta entre 30 y 50 s)
+HEDGE_S = 0.7            # no audio in this time: also request over another connection
+TOTAL_S = 6              # no audio from either in this time: Piper
+KEEP_S = 25              # after this unused, the connection is not reused (the server cuts it between 30 and 50 s)
 CONFIG_MSG = ("Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n"
               '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false",'
               '"wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}\r\n')
@@ -44,7 +44,7 @@ _piper_cache: dict[str, PiperVoice] = {}
 
 
 class _Conn:
-    """Una conexión WebSocket abierta con el servicio de voz de Edge, reutilizable frase a frase."""
+    """An open WebSocket connection to the Edge speech service, reusable sentence after sentence."""
 
     def __init__(self, session: aiohttp.ClientSession, ws):
         self.session, self.ws, self.used = session, ws, time.monotonic()
@@ -62,7 +62,7 @@ class _Conn:
 
 _conn: _Conn | None = None
 _warming: asyncio.Task | None = None
-_lock: asyncio.Lock | None = None   # una frase a la vez por la conexión (y abrirla, también dentro)
+_lock: asyncio.Lock | None = None   # one sentence at a time per connection (and opening it, also inside)
 
 
 def _get_lock() -> asyncio.Lock:
@@ -86,7 +86,7 @@ async def _open() -> _Conn:
 
 
 async def _take() -> _Conn:
-    """La conexión lista o una nueva (con el candado cogido)."""
+    """The ready connection or a new one (with the lock held)."""
     global _conn
     if _conn is None or not _conn.fresh():
         if _conn:
@@ -101,11 +101,11 @@ async def _warm():
         async with _get_lock():
             await _take()
     except Exception as e:
-        log.info("No pude abrir de antemano la voz: %s", e)
+        log.info("Could not open the voice connection in advance: %s", e)
 
 
 def warm() -> None:
-    """Abre ya la conexión de la voz (se llama al empezar a escuchar: estará lista cuando haya que hablar)."""
+    """Open the voice connection now (called when listening starts: it will be ready when it is time to speak)."""
     global _warming
     if settings["tts_engine"] != "edge" or (_conn and _conn.fresh()) or (_warming and not _warming.done()):
         return
@@ -113,7 +113,7 @@ def warm() -> None:
 
 
 async def _edge_ws(text: str, voice: str) -> AsyncIterator[bytes]:
-    """Trozos de MP3 de la frase, por la conexión que se reutiliza. Si se abandona a medias, se cierra."""
+    """MP3 chunks of the sentence over the reused connection. If abandoned midway, it is closed."""
     global _conn
     async with _get_lock():
         for attempt in (0, 1):
@@ -135,19 +135,19 @@ async def _edge_ws(text: str, voice: str) -> AsyncIterator[bytes]:
                             done = True
                             break
                     else:
-                        raise RuntimeError(f"Edge cerró la conexión ({m.type.name})")
+                        raise RuntimeError(f"Edge closed the connection ({m.type.name})")
                 if not done:
-                    raise RuntimeError("Edge cortó la frase")
+                    raise RuntimeError("Edge cut the sentence short")
                 conn.used = time.monotonic()
                 return
             except Exception:
                 await conn.close()
                 _conn = None
-                if got or attempt or not reused:   # con audio ya enviado o en una conexión nueva: no se repite
+                if got or attempt or not reused:   # with audio already sent or on a new connection: do not retry
                     raise
-                log.info("La conexión de la voz había caducado; abro otra")
+                log.info("The voice connection had expired; opening another")
             finally:
-                if not done and _conn is conn:   # abandonada a medias (interrupción): quedaría audio colgando
+                if not done and _conn is conn:   # abandoned midway (interruption): audio would be left hanging
                     await conn.close()
                     _conn = None
 
@@ -185,7 +185,7 @@ _MASC_A = {"día", "días", "mapa", "mapas", "problema", "problemas", "programa"
 
 
 def number_words(n: int) -> str:
-    """0-999.999.999 en palabras (masculino: «veintiuno», «doscientos»)."""
+    """0-999,999,999 in Spanish words (masculine: "veintiuno", "doscientos")."""
     if n < 30:
         return _UNITS[n]
     if n < 100:
@@ -202,7 +202,7 @@ def number_words(n: int) -> str:
 
 
 def _apocope(words: str, feminine: bool = False) -> str:
-    """«uno» delante de un nombre: «un aviso», «veintiún días», «una hora», «veintiuna tareas», «doscientas»."""
+    """Apocope of "uno" before a noun: "un aviso", "veintiún días", "una hora", "veintiuna tareas", "doscientas"."""
     if feminine and "millón" not in words and "millones" not in words:
         words = words.replace("ientos", "ientas")
     if words.endswith("veintiuno"):
@@ -218,8 +218,8 @@ def _feminine(noun: str) -> bool:
 
 
 def spell_numbers(text: str) -> str:
-    """Los números sueltos, en palabras: así las voces multilingües no se pasan al inglés con «99 céntimos».
-    Se dejan las horas (18:30), los decimales y lo que vaya pegado a letras o símbolos raros."""
+    """Standalone numbers as Spanish words: so multilingual voices do not switch to English on "99 céntimos".
+    Times (18:30), decimals and anything attached to letters or odd symbols are left alone."""
     text = re.sub(r"(?<![\d.,:/])(\d{1,9})\s?%", lambda m: number_words(int(m[1])) + " por ciento", text)
     text = re.sub(r"(?<![\d.,:/])(\d{1,9})\s?°", lambda m: number_words(int(m[1])) + " grados", text)
 
@@ -239,12 +239,12 @@ _NOT_NOUN = {"y", "o", "u", "e", "de", "del", "a", "al", "en", "con", "por", "pa
 
 
 def clean_for_speech(text: str) -> str:
-    # lo que las voces leen mal: «30/10» → «30 diagonal 10»; «3,50 €» → «centavos» (las multilingües)
+    # what voices read badly: "30/10" -> "30 diagonal 10"; "3,50 €" -> "centavos" (the multilingual ones)
     text = re.sub(r"(?<![\d/])(\d{1,2})/(\d{1,2})(?:/(\d{4}|\d{2}))?(?![\d/])(?!\s+de\s)", _date, text)
     text = re.sub(r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s?€", _euros, text)
-    text = re.sub(r"(?<![\d.,])1 de (" + "|".join(MONTHS) + r")\b", r"uno de \1", text)   # no «el primero de»
+    text = re.sub(r"(?<![\d.,])1 de (" + "|".join(MONTHS) + r")\b", r"uno de \1", text)   # not "el primero de"
     text = re.sub(r"```.*?```", "", text, flags=re.S)
-    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)   # [texto](enlace) → texto
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)   # [text](link) -> text
     text = re.sub(r"https?://\S+", "", text)
     text = re.sub(r"[*_#`>|~]", "", text)
     text = re.sub(r"^\s*[-•]\s+", "", text, flags=re.M)
@@ -260,7 +260,7 @@ def _decode(mp3: bytes) -> np.ndarray:
 
 
 async def _edge_lib(text: str, voice: str) -> AsyncIterator[bytes]:
-    """La de la librería (una conexión por frase): respaldo si la propia falla."""
+    """The library one (a connection per sentence): fallback if our own fails."""
     async for chunk in edge_tts.Communicate(text, voice, rate=f"{int(settings['tts_rate']):+d}%").stream():
         if chunk["type"] == "audio":
             yield chunk["data"]
@@ -280,9 +280,9 @@ async def _edge(text: str, voice: str, source=None) -> AsyncIterator[np.ndarray]
                     sent = end
                 next_at = len(mp3) + 6000
     finally:
-        await chunks.aclose()   # en orden, no cuando lo recoja el recolector (tiene la conexión cogida)
+        await chunks.aclose()   # in order, not whenever the garbage collector gets to it (it holds the connection)
     if not mp3:
-        raise RuntimeError("Edge no devolvió audio")
+        raise RuntimeError("Edge returned no audio")
     pcm = _decode(mp3)
     if len(pcm) > sent:
         yield pcm[sent:]
@@ -307,9 +307,9 @@ def _piper(text: str, voice: str) -> tuple[np.ndarray, int]:
 
 
 async def _race(text: str, voice: str):
-    """El primer trozo de audio por la conexión abierta; si tarda más de HEDGE_S (el servidor a veces se
-    queda pensando 2 s) o falla, se pide a la vez por una conexión nueva y gana la que llegue antes.
-    Devuelve (generador, primer trozo) o (None, None) si ninguna da audio en TOTAL_S."""
+    """The first audio chunk over the open connection; if it takes longer than HEDGE_S (the server sometimes
+    thinks for 2 s) or fails, it is also requested over a new connection and whichever arrives first wins.
+    Returns (generator, first chunk) or (None, None) if neither yields audio within TOTAL_S."""
     loop = asyncio.get_running_loop()
     t0 = loop.time()
     tries: list[tuple] = []
@@ -352,12 +352,12 @@ async def _race(text: str, voice: str):
 
 
 async def synthesize(text: str, lang: str) -> AsyncIterator[tuple[np.ndarray, int]]:
-    """Va entregando (audio, frecuencia) de la frase."""
-    lang = "es"   # solo español
+    """Yields (audio, sample rate) of the sentence as it goes."""
+    lang = "en" if lang == "en" else "es"
     if settings["tts_engine"] == "edge":
         voice = settings[f"voice_{lang}"]
-        # las multilingües a veces leen «99 céntimos» en inglés; con letra no
-        stream, first = await _race(spell_numbers(text) if "Multilingual" in voice else text, voice)
+        # multilingual voices sometimes read "99 céntimos" in English; spelled out they do not
+        stream, first = await _race(spell_numbers(text) if lang == "es" and "Multilingual" in voice else text, voice)
         if stream:
             try:
                 yield first, EDGE_RATE
@@ -367,10 +367,13 @@ async def synthesize(text: str, lang: str) -> AsyncIterator[tuple[np.ndarray, in
             except StopAsyncIteration:
                 return
             except Exception as e:
-                log.warning("Edge TTS se cortó a mitad de frase: %s", e or type(e).__name__)
+                log.warning("Edge TTS cut out mid-sentence: %s", e or type(e).__name__)
                 return
             finally:
                 await stream.aclose()
-        log.warning("Edge TTS no respondió, tiro de Piper")
-    audio, rate = await asyncio.to_thread(_piper, text, settings[f"piper_{lang}"])
+        log.warning("Edge TTS did not respond, falling back to Piper")
+    piper = settings[f"piper_{lang}"]
+    if not (MODELS_DIR / "piper" / f"{piper}.onnx").exists():   # offline fallback: only the Spanish model may be installed
+        piper = settings["piper_es"]
+    audio, rate = await asyncio.to_thread(_piper, text, piper)
     yield audio, rate

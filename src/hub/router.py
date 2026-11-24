@@ -1,4 +1,4 @@
-"""Router local: resuelve sin Claude las órdenes simples. Devuelve la respuesta o None."""
+"""Local router: answers simple commands without Claude. Returns the reply or None."""
 
 import re
 from datetime import datetime
@@ -41,6 +41,6 @@ ACK_WORDS = {
 
 
 def is_ack(text: str) -> bool:
-    """¿Es solo un «ah vale», «okey, gracias»… que no pide respuesta?"""
+    """Is it just an "ah ok", "okay, thanks"... that needs no reply?"""
     words = _norm(text).split()
     return not words or (len(words) <= 5 and all(w in ACK_WORDS for w in words))

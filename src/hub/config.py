@@ -1,4 +1,4 @@
-"""Rutas y ajustes persistentes de Cortex (config.yaml en la carpeta de código, sin secretos)."""
+"""Paths and persistent Cortex settings (config.yaml in the code folder, no secrets)."""
 
 import logging
 import os
@@ -10,31 +10,31 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]   # exe: junto al .exe
+ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]   # exe: next to the .exe
 WEB_DIR = ROOT / "web" / "hub"
 MODELS_DIR = ROOT / "models"
 LOGS_DIR = ROOT / "logs"
 CONFIG_FILE = ROOT / "config.yaml"
 
-load_dotenv(ROOT / ".env")   # secretos (Spotify…): solo en la carpeta de código, nunca en Drive
+load_dotenv(ROOT / ".env")   # secrets (Spotify...): only in the code folder, never in Drive
 
 DEFAULTS = {
-    "user_name": "",            # cómo llama Cortex al usuario en los textos; vacío = "el usuario"
+    "user_name": "",            # what Cortex calls the user in texts; empty = "the user"
     "data_dir": str(ROOT / "datos-local"),
     "claude_model": "haiku",
     "session_idle_minutes": 30,
-    "mic_device": None,          # nombre del dispositivo; None = predeterminado de Windows
+    "mic_device": None,          # device name; None = Windows default
     "speaker_device": None,
     "stt_model": "parakeet",
     "wake_enabled": True,
-    "wake_sensitivity": 2,       # 1 baja · 2 media · 3 alta
-    "followup_seconds": 6,       # micro abierto tras responder (0 = no)
-    "tts_engine": "edge",        # edge (con Piper de respaldo) | piper
-    "tts_rate": 15,              # % de velocidad sobre la normal
+    "wake_sensitivity": 2,       # 1 low · 2 medium · 3 high
+    "followup_seconds": 6,       # mic stays open after replying (0 = no)
+    "tts_engine": "edge",        # edge (with Piper as fallback) | piper
+    "tts_rate": 15,              # % speed over normal
     "barge_in": True,
-    "quiet_mode": False,          # modo silencio: los avisos de correo y novedades no se dicen en voz alta
-    "auto_update_hours": 6,       # actualización automática (Betis, tareas…) si queda plan de Claude; 0 = nunca
-    # webs de vídeo que Cortex puede abrir y controlar (Charlie inicia sesión una vez en esa ventana)
+    "quiet_mode": False,          # quiet mode: mail and news notices are not spoken aloud
+    "auto_update_hours": 6,       # automatic update (Betis, tasks...) if Claude plan allows; 0 = never
+    # video sites Cortex can open and control (the user signs in once in that window)
     "video_services": [
         {"name": "YouTube", "url": "https://www.youtube.com", "domains": ["youtube.com", "youtu.be"], "enabled": True},
         {"name": "RTVE Play", "url": "https://www.rtve.es/play/", "domains": ["rtve.es"], "enabled": True},
@@ -46,31 +46,31 @@ DEFAULTS = {
         {"name": "Disney+", "url": "https://www.disneyplus.com", "domains": ["disneyplus.com"], "enabled": True},
         {"name": "Movistar Plus+", "url": "https://ver.movistarplus.es", "domains": ["movistarplus.es"], "enabled": False},
     ],
-    # webs que nunca se abren aunque se activen arriba (la rellena Charlie si quiere; vacía de serie)
+    # sites that are never opened even if enabled above (filled in by the user; empty by default)
     "blocked_sites": [],
     "voice_es": "es-ES-XimenaNeural",
     "voice_en": "en-US-AvaMultilingualNeural",
     "piper_es": "es_ES-davefx-medium",
     "piper_en": "en_US-lessac-medium",
-    "notice_language": "es",
+    "notice_language": "en",
     "theme": "light",            # light | dark | auto
-    "spotify_device": "",        # "" = este portátil (Spotify de escritorio); si no, nombre del dispositivo Connect
+    "spotify_device": "",        # "" = this laptop (desktop Spotify); otherwise the Connect device name
     "ui_port": 8765,
-    # Primera vez: el instalador deja en config.yaml lo que se eligió y el asistente del panel lo termina
+    # First run: the installer writes the choices to config.yaml and the dashboard wizard finishes setup
     "setup_done": False,
-    "setup_widgets": [],             # tarjetas elegidas al instalar ([] = las de serie)
+    "setup_widgets": [],             # cards chosen at install time ([] = defaults)
     "setup_accounts": ["claude", "spotify", "email", "whatsapp"],
-    "whatsapp_mode": "read",     # read (solo leer) | write (leer y escribir desde el panel)
-    # Panel
+    "whatsapp_mode": "read",     # read (read only) | write (read and write from the dashboard)
+    # Dashboard
     "accent": "#0b8f55",
     "text_scale": 1,
-    "ambient_minutes": 10,           # reloj grande tras X min sin usarlo (0 = nunca)
+    "ambient_minutes": 10,           # big clock after X min of inactivity (0 = never)
     "weather_place": {"name": "Madrid", "lat": 40.4168, "lon": -3.7038},
-    # Avisos: horas de silencio (HH:MM; vacío = sin silencio). Lo que toque dentro espera al final.
+    # Notices: quiet hours (HH:MM; empty = none). Anything due inside waits until they end.
     "quiet_start": "",
     "quiet_end": "",
-    # Gestos: los lleva Cortex Sense (otro programa). Estos cuatro se ven y se cambian desde el panel de Hub,
-    # pero se guardan en Sense; los valores de aquí solo se ven si Sense no está en marcha.
+    # Gestures: handled by Cortex Sense (another program). These four are shown and changed from the Hub dashboard
+    # but stored in Sense; the values here only show when Sense is not running.
     "sense_url": "http://127.0.0.1:8766",
     "gestures_enabled": False,
     "gestures_require_look": True,
@@ -84,17 +84,17 @@ SENSE_KEYS = ("gestures_enabled", "gestures_require_look", "window_gestures", "g
 
 class Settings:
     def __init__(self):
-        self.sense = None   # SenseLink, lo pone app.py: los ajustes de SENSE_KEYS van y vienen de Cortex Sense
+        self.sense = None   # SenseLink, set by app.py: SENSE_KEYS settings are read from and written to Cortex Sense
         self._lock = threading.Lock()
         self._data = dict(DEFAULTS)
         if CONFIG_FILE.exists():
             saved = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8")) or {}
             for key, value in saved.items():
-                # los diccionarios (p. ej. gesture_actions) se mezclan: así aparecen las claves nuevas
+                # dicts (e.g. gesture_actions) are merged so new keys show up
                 if isinstance(value, dict) and isinstance(DEFAULTS.get(key), dict):
                     value = {**DEFAULTS[key], **value}
                 self._data[key] = value
-        if os.environ.get("CORTEX_USER_NAME"):   # el entorno / .env manda sobre config.yaml
+        if os.environ.get("CORTEX_USER_NAME"):   # the environment / .env overrides config.yaml
             self._data["user_name"] = os.environ["CORTEX_USER_NAME"]
 
     def _remote(self) -> dict:
@@ -114,7 +114,7 @@ class Settings:
         if remote:
             if self.sense and self.sense.connected:
                 if err := self.sense.update_settings(remote):
-                    logging.getLogger("hub").warning("Sense no aceptó %s: %s", remote, err)
+                    logging.getLogger("hub").warning("Sense did not accept %s: %s", remote, err)
             changes = {k: v for k, v in changes.items() if k not in SENSE_KEYS}
             if not changes:
                 return

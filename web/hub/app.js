@@ -4,20 +4,20 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const STATE_TEXT = {
-  idle: "Di «Cortex» o pulsa",
-  listening: "Te escucho…",
-  transcribing: "Un momento…",
-  thinking: "Pensando…",
-  speaking: "Hablando",
+  idle: "Say \"Cortex\" or press",
+  listening: "Listening…",
+  transcribing: "One moment…",
+  thinking: "Thinking…",
+  speaking: "Speaking",
 };
 
 const WIDGETS = {
-  avisos: "Avisos", today: "Hoy", tasks: "Tareas", betis: "Betis",
-  gym: "Gym", meals: "Comidas", money: "Dinero", gestures: "Gestos", status: "Estado",
-  search: "Vídeos", timers: "Temporizadores", compra: "Compra", devices: "Dispositivos", mail: "Correo",
+  avisos: "Reminders", today: "Today", tasks: "Tasks", betis: "Betis",
+  gym: "Gym", meals: "Meals", money: "Money", gestures: "Gestures", status: "Status",
+  search: "Videos", timers: "Timers", compra: "Shopping", devices: "Devices", mail: "Mail",
   whatsapp: "WhatsApp",
 };
-// icono y color de cada tarjeta (el color tiñe la burbuja del icono y el fondo)
+// icon and colour of each card (the colour tints the icon bubble and the background)
 const LOOK = {
   today: ["📅", "#3b82f6"], tasks: ["✅", "#8b5cf6"], avisos: ["🔔", "#ec4899"],
   betis: ["⚽", "#0b8f55"], gym: ["💪", "#f97316"], meals: ["🍽️", "#ef4444"], money: ["💶", "#14b8a6"],
@@ -26,7 +26,7 @@ const LOOK = {
   mail: ["✉️", "#0284c7"], whatsapp: ["💬", "#16a34a"],
 };
 
-const ROWS = 12;   // el panel es un tablero fijo de 12 × 12 que siempre cabe entero en pantalla
+const ROWS = 12;   // the dashboard is a fixed 12 × 12 board that always fits the screen
 
 const DEFAULT_LAYOUT = [
   { id: "today", x: 0, y: 0, w: 3, h: 6 },
@@ -47,23 +47,23 @@ const DEFAULT_LAYOUT = [
 ];
 
 const GESTURES = {
-  swipe_left: "Deslizar a la izquierda", swipe_right: "Deslizar a la derecha",
-  swipe_up: "Deslizar hacia arriba", swipe_down: "Deslizar hacia abajo",
-  open_palm: "Mano abierta", closed_fist: "Puño", thumb_up: "Pulgar arriba", thumb_down: "Pulgar abajo",
-  victory: "Uve (dos dedos)", pointing_up: "Índice arriba", i_love_you: "Cuernos con pulgar",
-  ok: "OK (pulgar e índice en círculo)", shaka: "Shaka (pulgar y meñique)", rock: "Cuernos (índice y meñique)",
-  three: "Tres dedos", shush: "Silencio (índice en los labios)",
-  flick_right: "Toque de índice a la derecha", flick_left: "Toque de índice a la izquierda",
-  circle_cw: "Círculo con el dedo (horario)", circle_ccw: "Círculo con el dedo (antihorario)",
-  wag: "Dedo que dice «no»", wave: "Saludar con la mano", push: "Empujar hacia la cámara",
-  both_palms: "Dos manos abiertas", both_thumbs_up: "Dos pulgares arriba", both_thumbs_down: "Dos pulgares abajo",
-  both_fists: "Dos puños", hands_apart: "Separar las manos", hands_together: "Juntar las manos",
+  swipe_left: "Swipe left", swipe_right: "Swipe right",
+  swipe_up: "Swipe up", swipe_down: "Swipe down",
+  open_palm: "Open palm", closed_fist: "Fist", thumb_up: "Thumb up", thumb_down: "Thumb down",
+  victory: "Victory (two fingers)", pointing_up: "Index finger up", i_love_you: "Horns with thumb",
+  ok: "OK (thumb and index in a circle)", shaka: "Shaka (thumb and pinky)", rock: "Horns (index and pinky)",
+  three: "Three fingers", shush: "Shush (index on lips)",
+  flick_right: "Index flick right", flick_left: "Index flick left",
+  circle_cw: "Finger circle (clockwise)", circle_ccw: "Finger circle (counter-clockwise)",
+  wag: "Finger saying \"no\"", wave: "Wave", push: "Push toward the camera",
+  both_palms: "Two open hands", both_thumbs_up: "Two thumbs up", both_thumbs_down: "Two thumbs down",
+  both_fists: "Two fists", hands_apart: "Pull hands apart", hands_together: "Bring hands together",
 };
 const ACTIONS = {
-  none: "Nada", next: "Siguiente canción", previous: "Canción anterior", toggle: "Pausar / seguir",
-  volume_up: "Subir volumen", volume_down: "Bajar volumen", listen: "Escuchar (como «Cortex»)",
-  stop: "Cortar al asistente (para todo)", quiet: "Callar al asistente (sigue con lo suyo)", ambient: "Modo reposo", wake_toggle: "Pausar/activar «Cortex»",
-  new_chat: "Conversación nueva", theme: "Cambiar claro/oscuro",
+  none: "Nothing", next: "Next track", previous: "Previous track", toggle: "Pause / resume",
+  volume_up: "Volume up", volume_down: "Volume down", listen: "Listen (like \"Cortex\")",
+  stop: "Cut off the assistant (stops everything)", quiet: "Silence the assistant (it keeps working)", ambient: "Idle mode", wake_toggle: "Pause/enable \"Cortex\"",
+  new_chat: "New conversation", theme: "Toggle light/dark",
 };
 const ACCENTS = ["#0b8f55", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#111827"];
 
@@ -76,13 +76,13 @@ let quitting = false;
 let lastActivity = Date.now();
 let vision = {};
 
-// ---------- panel y widgets ----------
-/** Reparte las tarjetas elegidas en el tablero de 12 × 12; sin ninguna válida, la distribución de serie. */
+// ---------- dashboard and widgets ----------
+/** Spread the chosen cards over the 12 × 12 board; with none valid, the default layout. */
 function layoutFor(ids) {
   const items = structuredClone(DEFAULT_LAYOUT);
   const on = items.filter(w => Array.isArray(ids) && ids.includes(w.id));
   if (!on.length) return items;
-  const rows = Math.ceil(on.length / 4);   // hasta 16 tarjetas: 4 filas de 4
+  const rows = Math.ceil(on.length / 4);   // up to 16 cards: 4 rows of 4
   for (const w of items) w.hidden = !on.includes(w);
   for (let y = 0, i = 0; y < rows; y++) {
     const n = Math.ceil((on.length - i) / (rows - y));
@@ -95,14 +95,14 @@ async function loadLayout() {
   let saved = [];
   try { saved = await (await fetch("/api/layout")).json(); } catch {}
   if (!Array.isArray(saved) || !saved.length) {
-    let chosen = [];   // las tarjetas elegidas en el instalador
+    let chosen = [];   // the cards chosen in the installer
     try { chosen = (await (await fetch("/api/settings")).json()).settings.setup_widgets; } catch {}
     return layoutFor(chosen);
   }
   const known = new Set(saved.map(w => w.id));
   for (const def of DEFAULT_LAYOUT) if (!known.has(def.id)) saved.push({ ...def, hidden: true });
-  // tamaños que falten (distribuciones viejas) salen de los de fábrica
-  // «hidden» siempre el guardado: si no, las que vienen ocultas de fábrica se volvían a ocultar al recargar
+  // missing sizes (old layouts) come from the defaults
+  // "hidden" is always the saved value: otherwise cards hidden by default would be hidden again on reload
   return saved.filter(w => WIDGETS[w.id]).map(w => ({ ...DEFAULT_LAYOUT.find(d => d.id === w.id), ...w,
     h: w.h || DEFAULT_LAYOUT.find(d => d.id === w.id)?.h || 2, hidden: !!w.hidden }));
 }
@@ -128,13 +128,13 @@ function makeItem(item) {
   return el;
 }
 
-/** Música arriba y conversación flotante: se montan una vez, fuera del tablero. */
+/** Top music and floating conversation: mounted once, outside the board. */
 function mountFixed() {
   if (!$("#topMusic").children.length) $("#topMusic").append(document.getElementById("tpl-spotify").content.cloneNode(true));
   if (!$("#chatPop").children.length) $("#chatPop").append(document.getElementById("tpl-chat").content.cloneNode(true));
 }
 
-// la conversación solo sale con el ratón encima del micro (o de ella misma) y se va al quitarlo
+// the conversation only shows while the mouse is over the mic (or itself) and goes away when it leaves
 let chatTimer = null;
 function openChat() {
   clearTimeout(chatTimer);
@@ -155,7 +155,7 @@ function bindChatPop() {
   pop.addEventListener("focusout", () => { chatTimer = setTimeout(maybeCloseChat, 450); });
 }
 
-// ---------- tarjeta abierta en grande: las demás se encogen a la derecha ----------
+// ---------- card opened full size: the others shrink to the right ----------
 const INTERACTIVE = "button, a, input, select, textarea, label, form, [data-dev], [data-video], [data-i], [data-min], [data-v], [data-task], .icon-btn";
 let focused = null;   // { item, card }
 function setFocus(item) {
@@ -171,20 +171,20 @@ function setFocus(item) {
     $("#focus").append(card);
     focused = { item, card };
   }
-  // al cerrar (o cambiar de tarjeta) el lector de correo vuelve a la lista
+  // on closing (or switching card) the mail reader goes back to the list
   if (mailOpen && !(focused && focused.card.querySelector("#mailList"))) { mailOpen = null; renderMail(last.mail || {}); }
-  setTimeout(syncScreen, 520);   // el vídeo sigue a su recuadro
+  setTimeout(syncScreen, 520);   // the video follows its frame
 }
-let resizedAt = -1e9;   // cuándo se acabó de estirar una tarjeta
+let resizedAt = -1e9;   // when a card last finished resizing
 
 function bindExpand() {
   $("#grid").addEventListener("click", e => {
     if (document.body.classList.contains("editing")) return;
-    // soltar el tirador tras estirar llega como clic en la tarjeta: eso no la abre
+    // releasing the handle after resizing arrives as a click on the card: that must not open it
     if (e.target.closest(".ui-resizable-handle") || performance.now() - resizedAt < 400) { e.stopPropagation(); return; }
     const item = e.target.closest(".grid-stack-item");
     if (!item) return;
-    // con una abierta, tocar una pequeña la abre a ella; si no, solo si no tocas un botón
+    // with one open, tapping a small one opens it; otherwise only if you did not tap a button
     if (document.body.classList.contains("focusing")) { e.preventDefault(); e.stopPropagation(); setFocus(item); return; }
     if (!e.target.closest(INTERACTIVE)) setFocus(item);
   }, true);
@@ -192,7 +192,7 @@ function bindExpand() {
   addEventListener("keydown", e => { if (e.key === "Escape" && focused) setFocus(null); });
 }
 
-// ---------- batería y uso de Claude ----------
+// ---------- battery and Claude usage ----------
 async function watchBattery() {
   if (!navigator.getBattery) return;
   try {
@@ -213,7 +213,7 @@ function renderCredits(u) {
   if (!chip || !u || u.left == null) return;
   chip.hidden = false;
   chip.textContent = `✦ ${Math.round(u.left)}%`;
-  chip.title = `Claude: te queda ${Math.round(u.left)}% de la sesión` + (u.resets ? ` · se renueva ${u.resets}` : "");
+  chip.title = `Claude: ${Math.round(u.left)}% of the session left` + (u.resets ? ` · resets ${u.resets}` : "");
   chip.classList.toggle("low", u.left < 15);
 }
 
@@ -225,17 +225,17 @@ async function buildGrid() {
   layout = await loadLayout();
   const gridEl = $("#grid");
   for (const item of layout) if (!item.hidden) gridEl.append(makeItem(item));
-  // el tamaño se cambia siempre desde la esquina (se guarda solo); mover tarjetas, solo editando
+  // resizing always works from the corner (saved automatically); moving cards only while editing
   const rows = Math.max(ROWS, ...layout.filter(i => !i.hidden).map(i => i.y + i.h));
   grid = GridStack.init({ column: 12, cellHeight: 88, margin: 0, float: true, staticGrid: false, disableDrag: true,
                           maxRow: rows, animate: true, resizable: { handles: "e, se, s", autoHide: false } }, gridEl);
   grid.on("resizestart", () => { resizedAt = performance.now() + 1e9; });
   grid.on("resizestop", () => {
     resizedAt = performance.now();
-    if (document.body.classList.contains("editing")) return;   // editando se guarda al pulsar «Listo»
+    if (document.body.classList.contains("editing")) return;   // while editing it is saved when "Done" is pressed
     saveLayout();
     requestAnimationFrame(fitGrid);
-    lastRect = ""; setTimeout(syncScreen, 400);   // el vídeo sigue a su tarjeta
+    lastRect = ""; setTimeout(syncScreen, 400);   // the video follows its card
   });
   fitGrid();
   addEventListener("resize", fitGrid);
@@ -250,7 +250,7 @@ function checkWebVersion(v) {
   if (v !== webVersion && !busy) location.reload();
 }
 
-/** Guarda lo que hay en el tablero. Solo se llama al pulsar «Listo», al añadir/quitar y al restablecer. */
+/** Save what is on the board. Only called on "Done", on add/remove and on reset. */
 function saveLayout() {
   const nodes = Object.fromEntries(grid.engine.nodes.map(n => [n.el?.getAttribute("gs-id") || n.id, n]));
   layout = layout.map(item => {
@@ -260,7 +260,7 @@ function saveLayout() {
   fetch("/api/layout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(layout) });
 }
 
-/** Pantalla completa: las filas se estiran para que el panel quepa entero sin scroll. */
+/** Full screen: rows stretch so the whole dashboard fits without scrolling. */
 function fitGrid() {
   if (!grid || document.body.classList.contains("editing")) return;
   document.body.classList.add("fit");
@@ -277,7 +277,7 @@ function toggleWidget(id) {
   const item = layout.find(w => w.id === id);
   if (!item) return;
   if (item.hidden) {
-    // dentro del tablero de 12×12 siempre: en un hueco libre (encogiéndola si hace falta) o partiendo la tarjeta más grande
+    // always inside the 12×12 board: in a free gap (shrinking it if needed) or by splitting the biggest card
     const def = DEFAULT_LAYOUT.find(d => d.id === id);
     item.hidden = false;
     const spot = placeFor(item.w || def.w, item.h || def.h);
@@ -285,7 +285,7 @@ function toggleWidget(id) {
     const el = makeItem({ ...def, ...item });
     grid.batchUpdate();
     if (spot.donor) grid.update(spot.donor.el, spot.donor.size);
-    $("#grid").append(el);   // makeWidget solo prepara una tarjeta que ya esté en el tablero, no la mete
+    $("#grid").append(el);   // makeWidget only prepares a card already on the board; it does not add it
     grid.makeWidget(el, { id, x: spot.x, y: spot.y, w: spot.w, h: spot.h });
     grid.batchUpdate(false);
     delete item.donor;
@@ -301,7 +301,7 @@ function toggleWidget(id) {
   renderWidgetChips();
 }
 
-/** Sitio para una tarjeta nueva sin salirse del tablero: {x, y, w, h, donor?}. */
+/** A spot for a new card without leaving the board: {x, y, w, h, donor?}. */
 function placeFor(w, h) {
   const rows = ROWS, busy = Array.from({ length: rows }, () => Array(12).fill(false));
   for (const n of grid.engine.nodes)
@@ -311,13 +311,13 @@ function placeFor(w, h) {
     for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (busy[j][i]) return false;
     return true;
   };
-  // 1) su tamaño, y si no cabe, cada vez más pequeña (mínimo 2×2), el hueco más grande primero
+  // 1) its own size, and if it does not fit, smaller and smaller (minimum 2×2), biggest gap first
   const sizes = [];
   for (let ww = w; ww >= 2; ww--) for (let hh = h; hh >= 2; hh--) sizes.push([ww, hh]);
   sizes.sort((a, b) => b[0] * b[1] - a[0] * a[1]);
   for (const [ww, hh] of sizes)
     for (let y = 0; y <= rows - hh; y++) for (let x = 0; x <= 12 - ww; x++) if (free(x, y, ww, hh)) return { x, y, w: ww, h: hh };
-  // 2) sin hueco: la tarjeta más grande se parte por la mitad y la nueva ocupa una mitad
+  // 2) no gap: the biggest card is split in half and the new one takes one half
   const big = [...grid.engine.nodes].filter(n => n.h >= 4 || n.w >= 4).sort((a, b) => b.w * b.h - a.w * a.h)[0];
   if (!big) return { x: 0, y: rows, w, h };
   if (big.h >= big.w / 1.5 && big.h >= 4) {
@@ -345,10 +345,10 @@ function setEditing(editing) {
   document.body.classList.toggle("editing", editing);
   $("#editBtn").classList.toggle("on", editing);
   $("#editbar").hidden = !editing;
-  grid.enableMove(editing);   // estirar se puede siempre; mover, solo editando
+  grid.enableMove(editing);   // resizing is always possible; moving only while editing
   if (editing) {
     renderWidgetChips();
-    document.body.classList.remove("fit");   // editando se puede hacer scroll
+    document.body.classList.remove("fit");   // scrolling is allowed while editing
   } else {
     saveLayout();
   }
@@ -357,7 +357,7 @@ function setEditing(editing) {
 
 async function resetLayout() {
   grid.removeAll();
-  $$("#grid > .grid-stack-item").forEach(el => el.remove());   // por si alguna quedó suelta en la página
+  $$("#grid > .grid-stack-item").forEach(el => el.remove());   // in case one was left loose on the page
   grid.batchUpdate();
   layout = structuredClone(DEFAULT_LAYOUT);
   for (const item of layout) if (!item.hidden) { const el = makeItem(item); $("#grid").append(el); grid.makeWidget(el); }
@@ -367,7 +367,7 @@ async function resetLayout() {
   renderAll();
 }
 
-// los widgets se crean y destruyen: tras cambiar el panel se repinta todo con lo último que se sabe
+// widgets are created and destroyed: after changing the dashboard everything is repainted from the latest known data
 const last = {};
 function renderAll() {
   bindWidgetControls();
@@ -385,13 +385,13 @@ function renderAll() {
   renderVision(vision);
 }
 
-// ---------- conexión con el backend ----------
+// ---------- backend connection ----------
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = e => handle(JSON.parse(e.data));
   ws.onclose = () => {
     setState("idle");
-    setSub(quitting ? "Cortex está cerrado" : "Sin conexión con Cortex, reintentando…");
+    setSub(quitting ? "Cortex is closed" : "No connection to Cortex, retrying…");
     setTimeout(connect, 1500);
   };
 }
@@ -420,7 +420,7 @@ function handle(msg) {
     case "user":
       remember(msg);
       addMessage(msg);
-      setSub(`«${msg.text}»`);
+      setSub(`"${msg.text}"`);
       break;
     case "assistant": remember(msg); addMessage(msg); break;
     case "assistant_start":
@@ -477,8 +477,8 @@ function handle(msg) {
       break;
     case "wake_train":
       $("#retrainBtn").disabled = msg.running;
-      $("#trainInfo").textContent = msg.running ? "Reentrenando… (unos minutos, puedes seguir usándolo)"
-        : msg.ok ? `Detector actualizado. ${msg.summary || ""}` : "El reentreno falló: mira logs\train_wake.log";
+      $("#trainInfo").textContent = msg.running ? "Retraining… (a few minutes, you can keep using it)"
+        : msg.ok ? `Detector updated. ${msg.summary || ""}` : "Retraining failed: see logs\\train_wake.log";
       break;
   }
 }
@@ -498,7 +498,7 @@ function setSub(text) {
   $("#stateSub").textContent = text || "";
 }
 
-// ---------- conversación ----------
+// ---------- conversation ----------
 function addMessage(m) {
   const box = $("#messages");
   if (!box) return null;
@@ -509,7 +509,7 @@ function addMessage(m) {
   if (m.local) {
     const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = "sin Claude";
+    meta.textContent = "without Claude";
     el.append(meta);
   }
   box.append(el);
@@ -522,7 +522,7 @@ function showEmptyHint() {
   if (box && !box.children.length) {
     const p = document.createElement("p");
     p.className = "empty";
-    p.textContent = "Aquí verás lo que hablas con el asistente. Mientras espera «Cortex», el micro está siempre encendido y puede activarse por error. Ese audio se procesa en este equipo; lo que le dices o escribes se envía a Claude, y las respuestas se leen con la voz en línea de Microsoft Edge.";
+    p.textContent = "Here you will see what you say to the assistant. While waiting for \"Cortex\", the mic is always on and may trigger by mistake. That audio is processed on this computer; what you say or type is sent to Claude, and replies are read aloud with the Microsoft Edge online voice.";
     box.append(p);
   }
 }
@@ -532,13 +532,13 @@ function scrollChat() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
-// ---------- estado ----------
+// ---------- status ----------
 function renderStatus(s) {
   const wake = $("#wakeBtn");
   wake.classList.toggle("on", s.wake);
   wake.classList.toggle("off", !s.wake);
   wake.querySelector("use").setAttribute("href", s.wake ? "#i-ear" : "#i-ear-off");
-  wake.title = s.wake ? "Escuchando «Cortex» (pulsa para pausar)" : "No escucha «Cortex» (pulsa para activar)";
+  wake.title = s.wake ? "Listening for \"Cortex\" (press to pause)" : "Not listening for \"Cortex\" (press to enable)";
 
   renderWake(s);
   const list = $("#statusList");
@@ -546,14 +546,14 @@ function renderStatus(s) {
   const plan = s.claude.plan || {};
   const used = plan.unifiedWindows?.five_hour?.utilization;
   const rows = [
-    ["Micro", s.mic.ok, s.mic.name || "sin micro"],
-    ["Altavoz", s.speaker.ok, s.speaker.name || "sin altavoz"],
-    ["Claude", s.claude.ok, s.claude.ok === false ? "con problemas" : modelName(s.claude.model)],
-    ["«Cortex»", s.wake, s.wake ? (s.wake_method === "detector" ? "escuchando (detector)" : "escuchando") : "en pausa"],
+    ["Mic", s.mic.ok, s.mic.name || "no mic"],
+    ["Speaker", s.speaker.ok, s.speaker.name || "no speaker"],
+    ["Claude", s.claude.ok, s.claude.ok === false ? "having problems" : modelName(s.claude.model)],
+    ["\"Cortex\"", s.wake, s.wake ? (s.wake_method === "detector" ? "listening (detector)" : "listening") : "paused"],
   ];
-  if (vision.enabled !== undefined) rows.push(["Cámara", vision.enabled ? vision.camera_ok : null,
-    !vision.enabled ? "apagada" : vision.camera_ok ? (vision.engaged ? "te está viendo" : "vigilando") : "sin cámara"]);
-  if (s.mic.muted) rows[0][2] = "silenciado en Windows";
+  if (vision.enabled !== undefined) rows.push(["Camera", vision.enabled ? vision.camera_ok : null,
+    !vision.enabled ? "off" : vision.camera_ok ? (vision.engaged ? "watching you" : "standing by") : "no camera"]);
+  if (s.mic.muted) rows[0][2] = "muted in Windows";
   list.replaceChildren(...rows.map(([label, ok, value]) => {
     const li = document.createElement("li");
     li.className = ok === null || ok === undefined ? "" : ok ? "ok" : "bad";
@@ -565,7 +565,7 @@ function renderStatus(s) {
   if (s.mic.muted) {
     const btn = document.createElement("button");
     btn.className = "btn";
-    btn.textContent = "Activar micro";
+    btn.textContent = "Unmute mic";
     btn.addEventListener("click", () => send({ action: "unmute_mic" }));
     const li = document.createElement("li");
     li.style.gridTemplateColumns = "1fr";
@@ -575,7 +575,7 @@ function renderStatus(s) {
   if (used !== undefined) {
     const li = document.createElement("li");
     li.className = used > 0.9 ? "bad" : "ok";
-    li.innerHTML = `<i></i><span class="label">Plan 5 h</span><span class="meter"><span class="bar"><span></span></span><small></small></span>`;
+    li.innerHTML = `<i></i><span class="label">5 h plan</span><span class="meter"><span class="bar"><span></span></span><small></small></span>`;
     li.querySelector(".bar span").style.width = `${Math.round(used * 100)}%`;
     li.querySelector("small").textContent = `${Math.round(used * 100)}%`;
     list.append(li);
@@ -590,7 +590,7 @@ function renderEnroll(m) {
     $("#enrollInfo").textContent = m.message || "";
     setSub(m.message || "");
   } else {
-    const text = `Di «Cortex» (${m.step} de ${m.total})`;
+    const text = `Say "Cortex" (${m.step} of ${m.total})`;
     $("#enrollInfo").textContent = text;
     setSub(text);
   }
@@ -599,22 +599,22 @@ function renderEnroll(m) {
 function renderWake(s) {
   if (!enrolling) {
     $("#enrollInfo").textContent = s.wake_samples
-      ? `Tengo ${s.wake_samples} grabaciones tuyas. Puedes grabar más si aún falla.`
-      : "Graba «Cortex» unas cuantas veces para que te reconozca mejor.";
+      ? `I have ${s.wake_samples} recordings of you. You can record more if it still misses.`
+      : "Record \"Cortex\" a few times so it recognises you better.";
   }
   const h = s.last_heard || {};
   const box = $("#lastHeard");
   box.hidden = !h.time;
   if (h.time) {
     const ago = Math.round((Date.now() / 1000 - h.time));
-    box.innerHTML = "Lo último que oí: <b></b><br><span></span>";
-    box.querySelector("b").textContent = `«${h.text || "…"}»`;
+    box.innerHTML = "Last thing I heard: <b></b><br><span></span>";
+    box.querySelector("b").textContent = `"${h.text || "…"}"`;
     box.querySelector("span").textContent =
-      `${h.wake ? "Me activé" : "No me activé"} · puntuación ${h.distance} · hace ${ago < 60 ? ago + " s" : Math.round(ago / 60) + " min"}`;
+      `${h.wake ? "Triggered" : "Did not trigger"} · score ${h.distance} · ${ago < 60 ? ago + " s" : Math.round(ago / 60) + " min"} ago`;
   }
 }
 
-// ---------- música ----------
+// ---------- music ----------
 let spotify = {};
 let spTimer;
 function renderSpotify(s) {
@@ -626,12 +626,12 @@ function renderSpotify(s) {
   $("#spOff").hidden = s.connected;
   $("#spOn").hidden = !s.connected;
   $("#spOffText").textContent = s.client_id
-    ? "Conecta tu cuenta para poner música por voz."
-    : "Falta el Client ID de Spotify: Ajustes → Cerebro → Asistente de configuración.";
+    ? "Connect your account to play music by voice."
+    : "Spotify Client ID missing: Settings → Brain → Setup assistant.";
   $("#spConnect").hidden = !s.client_id;
   $("#spDevice").textContent = s.device || "";
-  $("#spTitle").textContent = s.title || "Nada sonando";
-  $("#spArtist").textContent = s.artist || "Di «Cortex, pon la playlist…»";
+  $("#spTitle").textContent = s.title || "Nothing playing";
+  $("#spArtist").textContent = s.artist || "Say \"Cortex, play the playlist…\"";
   const cover = $("#spCover");
   cover.style.backgroundImage = s.image ? `url("${s.image}")` : "";
   cover.classList.toggle("has-img", !!s.image);
@@ -654,8 +654,8 @@ function renderSpotify(s) {
 function renderSpotifySettings() {
   const s = spotify;
   const info = $("#spSettingsInfo");
-  info.textContent = !s.client_id ? "Falta el Client ID de Spotify: Ajustes → Cerebro → Asistente de configuración"
-    : s.connected ? "Conectado con tu cuenta." : "Sin conectar.";
+  info.textContent = !s.client_id ? "Spotify Client ID missing: Settings → Brain → Setup assistant"
+    : s.connected ? "Connected to your account." : "Not connected.";
   $("#spSettingsConnect").hidden = s.connected || !s.client_id;
   $("#spLogout").hidden = !s.connected;
 }
@@ -666,7 +666,7 @@ function spotifyCmd(action, value) {
   }).then(r => r.json()).then(r => { if (r.error) toast(r.error); return r; });
 }
 
-// ---------- datos (Drive) ----------
+// ---------- data (Drive) ----------
 function esc(s) {
   return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
@@ -693,21 +693,21 @@ function renderData(d) {
   setHTML("#todayList", d.today.items.length ? d.today.items.map(i => {
     const active = /^\d\d:\d\d$/.test(i.hora) && i.fin && i.hora <= now && now < i.fin;
     return `<li class="${active ? "now" : ""}"><span class="t">${esc(i.hora)}</span><span>${esc(i.que)}</span></li>`;
-  }).join("") : `<li class="empty">Nada más por hoy</li>`);
+  }).join("") : `<li class="empty">Nothing else today</li>`);
 
   renderTasks(d.tasks);
 
   const [next, ...rest] = d.betis;
   setHTML("#betisNext", next ? `<b>${esc(next.partido)}</b><span>${esc(next.cuando)}${next.hora ? " · " + esc(next.hora) : ""}</span>`
-    : `<span>Sin partidos apuntados</span>`);
+    : `<span>No matches listed</span>`);
   setHTML("#betisList", rest.map(m => `<li>
       <span class="when">${esc(m.cuando)}</span>
       <div><div>${esc(m.partido)}</div><small>${esc(m.hora || "")}</small></div>
     </li>`).join(""));
 
   if ($("#gymToday")) {
-    $("#gymToday").textContent = d.gym.today || "Hoy descansas";
-    $("#gymNext").textContent = d.gym.tomorrow ? `Mañana: ${lower1(d.gym.tomorrow)}` : "";
+    $("#gymToday").textContent = d.gym.today || "Rest day today";
+    $("#gymNext").textContent = d.gym.tomorrow ? `Tomorrow: ${lower1(d.gym.tomorrow)}` : "";
     setHTML("#gymWeek", (d.gym.week || []).map(w => `<li class="${w.hoy ? "now" : ""}"><span class="when">${esc(w.dia)}</span>
       <div>${esc(w.que)}</div></li>`).join(""));
     $("#gymNotes").textContent = (d.gym.notes || []).join(" · ");
@@ -716,27 +716,28 @@ function renderData(d) {
   setHTML("#mealsList", d.menu.map(m => `<li class="${m.hoy ? "now" : ""}">
       <span class="when">${esc(m.dia)}</span>
       <div><div>${esc(m.plato)}</div><small>${esc(m.cubre || "")}</small></div>
-    </li>`).join("") || `<li class="empty">Sin menú</li>`);
+    </li>`).join("") || `<li class="empty">No menu</li>`);
 
   renderMoney();
   setHTML("#datesList", d.dates.map(f => `<li>
-      <span class="when">${esc(f.cuando)}</span><div>${esc(f.que)}</div></li>`).join("") || `<li class="empty">Nada en las próximas semanas</li>`);
+      <span class="when">${esc(f.cuando)}</span><div>${esc(f.que)}</div></li>`).join("") || `<li class="empty">Nothing in the coming weeks</li>`);
 }
 
-// ---------- tareas (a mano: hecha, cambiar, quitar, nueva; sin confirmaciones) ----------
-const PRIOS = ["alta", "media", "baja"];
+// ---------- tasks (manual: done, edit, remove, new; no confirmations) ----------
+const PRIOS = ["alta", "media", "baja"];   // data values from the sheet
+const PRIO_LABEL = { alta: "High", media: "Medium", baja: "Low" };
 function renderTasks(tasks) {
   const list = $("#tasksList");
-  if (!list || !tasks || list.querySelector(".t-form")) return;   // no pisar lo que estás escribiendo
+  if (!list || !tasks || list.querySelector(".t-form")) return;   // do not overwrite what you are typing
   $("#tasksCount").textContent = tasks.length || "";
   list.innerHTML = tasks.map(t => `<li data-task="${t.i}" title="${esc(t.notas)}">
-      <button class="t-check p-${esc(t.prioridad)}" data-task-act="done" title="Hecha"><svg><use href="#i-check"/></svg></button>
+      <button class="t-check p-${esc(t.prioridad)}" data-task-act="done" title="Done"><svg><use href="#i-check"/></svg></button>
       <div class="t-body"><div>${esc(t.tarea)}</div>${t.cuando || t.estado ? `<small>${esc([t.cuando, t.estado].filter(Boolean).join(" · "))}</small>` : ""}</div>
       <span class="t-acts">
-        <button class="icon-btn sm" data-task-act="edit" title="Cambiar"><svg><use href="#i-pencil"/></svg></button>
-        <button class="icon-btn sm" data-task-act="delete" title="Quitar"><svg><use href="#i-trash"/></svg></button>
+        <button class="icon-btn sm" data-task-act="edit" title="Edit"><svg><use href="#i-pencil"/></svg></button>
+        <button class="icon-btn sm" data-task-act="delete" title="Remove"><svg><use href="#i-trash"/></svg></button>
       </span>
-    </li>`).join("") || `<li class="empty">Nada pendiente 🎉</li>`;
+    </li>`).join("") || `<li class="empty">Nothing pending 🎉</li>`;
 }
 
 function taskForm(t = {}) {
@@ -744,12 +745,12 @@ function taskForm(t = {}) {
   li.className = "t-form";
   li.dataset.task = t.i ?? "";
   li.innerHTML = `<form>
-      <input class="input" name="tarea" placeholder="¿Qué hay que hacer?" maxlength="200" required>
+      <input class="input" name="tarea" placeholder="What needs doing?" maxlength="200" required>
       <div class="t-form-row">
-        <input class="input" name="cuando" placeholder="Cuándo (opcional)" maxlength="80">
-        <select class="input" name="prioridad">${PRIOS.map(p => `<option value="${p}">${p[0].toUpperCase() + p.slice(1)}</option>`).join("")}</select>
-        <button type="button" class="text-btn" data-task-act="cancel">Cancelar</button>
-        <button class="btn primary"><svg><use href="#i-check"/></svg>Guardar</button>
+        <input class="input" name="cuando" placeholder="When (optional)" maxlength="80">
+        <select class="input" name="prioridad">${PRIOS.map(p => `<option value="${p}">${PRIO_LABEL[p]}</option>`).join("")}</select>
+        <button type="button" class="text-btn" data-task-act="cancel">Cancel</button>
+        <button class="btn primary"><svg><use href="#i-check"/></svg>Save</button>
       </div></form>`;
   const f = li.querySelector("form");
   f.tarea.value = t.tarea || "";
@@ -770,7 +771,7 @@ async function taskCmd(body) {
     $$("#tasksList .t-form").forEach(el => el.remove());
     last.data = r.data;
     renderData(r.data);
-  } catch (e) { toast("No pude guardar la tarea"); }
+  } catch (e) { toast("Could not save the task"); }
 }
 
 function onTaskClick(e) {
@@ -800,29 +801,29 @@ function addTask() {
   form.querySelector("input").focus();
 }
 
-// ---------- dinero: saldo y últimos movimientos ----------
+// ---------- money: balance and latest transactions ----------
 function renderMoney() {
   if (!$("#moneyStats")) return;
   const money = last.data?.money || {};
   const a = last.bank?.ok && last.bank.accounts[0];
-  const eur2 = v => v.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
-  setHTML("#moneyStats", [["Revolut", bankBalance, "big"], ["Colchón", money.colchon, ""]]
+  const eur2 = v => v.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  setHTML("#moneyStats", [["Revolut", bankBalance, "big"], ["Cash stash", money.colchon, ""]]
     .filter(([, v]) => v != null)
     .map(([k, v, cls]) => `<div class="${cls}"><small>${k}</small><b>${esc(typeof v === "number" ? eur2(v) : v)}</b></div>`).join(""));
   const moves = a ? a.recent || [] : [];
-  const day = s => s ? new Date(s + "T12:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" }) : "";
+  const day = s => s ? new Date(s + "T12:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
   setHTML("#moneyMoves", moves.map(m => `<li class="${m.amount > 0 ? "in" : ""}">
-      <span class="when">${esc(day(m.date))}</span><span class="m-desc">${esc(m.description || "—")}${m.pending ? " <small>pendiente</small>" : ""}</span>
+      <span class="when">${esc(day(m.date))}</span><span class="m-desc">${esc(m.description || "—")}${m.pending ? " <small>pending</small>" : ""}</span>
       <b>${m.amount > 0 ? "+" : "−"}${esc(eur2(Math.abs(m.amount)))}</b></li>`).join("")
-    || `<li class="empty">${a ? "Sin movimientos recientes" : "Sin banco conectado"}</li>`);
+    || `<li class="empty">${a ? "No recent transactions" : "No bank connected"}</li>`);
   if ($("#moneyUpdated") && last.bank?.fetched_at)
-    $("#moneyUpdated").textContent = new Date(last.bank.fetched_at * 1000).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    $("#moneyUpdated").textContent = new Date(last.bank.fetched_at * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-// ---------- banco (Revolut, solo lectura) ----------
+// ---------- bank (Revolut, read-only) ----------
 let bankBalance = null;
 
-const eur0 = v => Math.round(v).toLocaleString("es-ES") + " €";
+const eur0 = v => Math.round(v).toLocaleString("en-GB") + " €";
 
 async function loadBank() {
   try {
@@ -835,17 +836,17 @@ async function loadBank() {
   } catch {}
 }
 
-// ---------- buscador ----------
+// ---------- search ----------
 function renderVideos(list) {
   setHTML("#searchResults", list.map(v => `<li><a href="#" data-video="${esc(v.id)}" data-title="${esc(v.title)}">
     <div class="r-thumb"><img src="${esc(v.thumb)}" alt="" loading="lazy"><span class="r-len">${esc(v.length)}</span></div>
     <div class="r-title">${esc(v.title)}</div><div class="r-site">${esc(v.channel)}</div></a></li>`).join("")
-    || `<li class="r-empty">Nada en YouTube con eso.</li>`);
+    || `<li class="r-empty">Nothing on YouTube for that.</li>`);
 }
 
 const fmtTime = s => s == null ? "" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-/** Recuadro del widget en píxeles de pantalla (mpv se coloca encima). */
+/** The widget frame in screen pixels (mpv is placed on top of it). */
 function screenRect() {
   const el = $("#videoScreen");
   if (!el || el.hidden) return null;
@@ -877,11 +878,11 @@ function renderVideoNow(st) {
   if ($("#videoDock")) {
     $("#videoDock").hidden = st.source !== "web";
     $("#videoDock").dataset.v = st.docked === false ? "dock" : "undock";
-    $("#videoDock").textContent = st.docked === false ? "Al panel" : "Ventana";
+    $("#videoDock").textContent = st.docked === false ? "To dashboard" : "Window";
   }
   if (!st.playing) return;
-  $("#videoTitle").textContent = st.title || "Vídeo";
-  $("#videoTime").textContent = st.duration ? `${fmtTime(st.pos)} / ${fmtTime(st.duration)}${st.paused ? " · en pausa" : ""}` : "Cargando…";
+  $("#videoTitle").textContent = st.title || "Video";
+  $("#videoTime").textContent = st.duration ? `${fmtTime(st.pos)} / ${fmtTime(st.duration)}${st.paused ? " · paused" : ""}` : "Loading…";
   $("#videoProg").style.width = st.duration ? `${Math.min(100, (st.pos || 0) / st.duration * 100)}%` : "0";
   $("#videoPP").setAttribute("href", st.paused ? "#i-play" : "#i-pause");
 }
@@ -903,7 +904,7 @@ async function doSearch(e) {
   e?.preventDefault();
   const q = $("#searchInput").value.trim();
   if (!q) return;
-  setHTML("#searchResults", `<li class="r-empty">Buscando…</li>`);
+  setHTML("#searchResults", `<li class="r-empty">Searching…</li>`);
   try {
     const r = await (await fetch("/api/youtube?q=" + encodeURIComponent(q))).json();
     if (!r.ok) throw new Error(r.error);
@@ -914,9 +915,9 @@ async function doSearch(e) {
 }
 
 
-// ---------- temporizadores ----------
+// ---------- timers ----------
 let timerList = [];
-let timerOffset = 0;   // reloj del servidor − reloj del panel
+let timerOffset = 0;   // server clock − dashboard clock
 
 async function loadTimers() {
   try {
@@ -939,7 +940,7 @@ function renderTimers() {
   const now = (Date.now() + timerOffset) / 1000;
   const live = timerList.filter(t => t.end > now - 1);
   if (!live.length) {
-    if (list.dataset.empty !== "1") list.innerHTML = `<li class="r-empty">Di «Cortex, temporizador de 10 minutos» o pulsa uno.</li>`;
+    if (list.dataset.empty !== "1") list.innerHTML = `<li class="r-empty">Say "Cortex, set a 10-minute timer" or tap one.</li>`;
     list.dataset.empty = "1";
     return;
   }
@@ -947,8 +948,8 @@ function renderTimers() {
   list.innerHTML = live.map(t => {
     const left = t.end - now;
     return `<li class="${left < 10 ? "ending" : ""}"><div><div class="t-left">${fmtLeft(left)}</div>
-      <div class="t-label">${esc(t.label || "Temporizador")}</div></div><span></span>
-      <button class="icon-btn small" data-cancel-timer="${esc(t.id)}" title="Quitar"><svg><use href="#i-x"/></svg></button>
+      <div class="t-label">${esc(t.label || "Timer")}</div></div><span></span>
+      <button class="icon-btn small" data-cancel-timer="${esc(t.id)}" title="Remove"><svg><use href="#i-x"/></svg></button>
       <span class="t-bar" style="width:${Math.max(0, Math.min(100, left / t.seconds * 100))}%"></span></li>`;
   }).join("");
 }
@@ -960,36 +961,36 @@ async function timerCmd(body) {
   } catch {}
 }
 
-// ---------- lista de la compra ----------
+// ---------- shopping list ----------
 async function loadCompra() {
   try { last.compra = (await (await fetch("/api/compra")).json()).items; renderCompra(last.compra); } catch {}
 }
 
-// ---------- correo ----------
+// ---------- mail ----------
 async function loadMail() {
   try { last.mail = await (await fetch("/api/mail")).json(); renderMail(last.mail); } catch {}
 }
 
-let mailLogin = false;   // formulario de cuentas abierto
-const MAIL_DEFAULT = {};   // sin correos de serie: el usuario escribe los suyos
-let mailOpen = null;   // correo abierto en el lector (tarjeta en grande)
+let mailLogin = false;   // accounts form open
+const MAIL_DEFAULT = {};   // no default addresses: the user types their own
+let mailOpen = null;   // mail open in the reader (full-size card)
 function renderMail(m) {
   if (!$("#mailList")) return;
   if (mailOpen && !document.body.classList.contains("focusing")) mailOpen = null;
-  if (mailOpen) return;   // leyendo: la lista no pisa el lector
+  if (mailOpen) return;   // reading: the list does not overwrite the reader
   const pending = (m.slots || []).some(s => !s.ok);
   if (mailLogin || !m.configured || (pending && !m.unread.length)) {
     if (!$("#mailList .mail-login")) renderMailLogin(m);
     $("#mailCount").textContent = "";
     return;
   }
-  $("#mailCount").textContent = m.unread.length ? `${m.unread.length} sin leer` : "";
-  const when = t => t ? new Date(t * 1000).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+  $("#mailCount").textContent = m.unread.length ? `${m.unread.length} unread` : "";
+  const when = t => t ? new Date(t * 1000).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
   const two = (m.accounts || []).length > 1;
   setHTML("#mailList", (m.error ? `<li class="setup">${esc(m.error)}</li>` : "") + (m.unread.map(x => `<li data-mail="${esc(x.id)}">
       <div><b>${esc(x.from)}</b><span>${esc(x.subject)}</span></div>
       <small>${two ? `<i class="acc acc-${esc(x.account)}">${x.account === "principal" ? "P" : "S"}</i> ` : ""}${esc(when(x.time))}</small></li>`).join("")
-    || `<li class="setup">Nada sin leer.</li>`));
+    || `<li class="setup">Nothing unread.</li>`));
 }
 
 const KB = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
@@ -997,69 +998,69 @@ const KB = n => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB`
 async function openMail(id) {
   mailOpen = id;
   setHTML("#mailList", `<li class="mail-read">
-      <div class="mail-read-head"><button class="icon-btn" id="mailBack" title="Volver">‹</button>
-        <div class="mr-meta"><b id="mrSubject">Abriendo…</b><span id="mrFrom"></span></div>
-        <button class="text-btn" id="mailSum">Resumir</button></div>
+      <div class="mail-read-head"><button class="icon-btn" id="mailBack" title="Back">‹</button>
+        <div class="mr-meta"><b id="mrSubject">Opening…</b><span id="mrFrom"></span></div>
+        <button class="text-btn" id="mailSum">Summarize</button></div>
       <div class="mr-files" id="mrFiles"></div>
       <iframe id="mrBody" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"
         src="/api/mail/view?id=${encodeURIComponent(id)}"></iframe></li>`);
   $("#mailBack").onclick = () => { mailOpen = null; renderMail(last.mail || {}); };
-  $("#mailSum").onclick = () => send({ action: "text", text: `Resúmeme en corto el correo ${id}.` });
+  $("#mailSum").onclick = () => send({ action: "text", text: `Give me a short summary of email ${id}.` });
   let r;
   try {
     const res = await fetch(`/api/mail/open?id=${encodeURIComponent(id)}`);
     r = res.ok ? await res.json() : { error: await res.text() };
-  } catch { r = { error: "Sin conexión con Cortex" }; }
+  } catch { r = { error: "No connection to Cortex" }; }
   if (mailOpen !== id) return;
   if (r.error) { $("#mrSubject").textContent = r.error; return; }
-  $("#mrSubject").textContent = r.subject || "(sin asunto)";
+  $("#mrSubject").textContent = r.subject || "(no subject)";
   const d = r.date ? new Date(r.date) : null;
-  $("#mrFrom").textContent = r.from + (d && !isNaN(d) ? " · " + d.toLocaleString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+  $("#mrFrom").textContent = r.from + (d && !isNaN(d) ? " · " + d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
   const part = (f, dl) => `/api/mail/part?id=${encodeURIComponent(id)}&n=${f.n}${dl ? "&dl=1" : ""}`;
   setHTML("#mrFiles", r.files.map(f => f.type.startsWith("image/") && f.type !== "image/svg+xml"
-    ? `<a class="mr-file mr-img" href="${part(f, 1)}" download="${esc(f.name)}" title="Descargar ${esc(f.name)}">
+    ? `<a class="mr-file mr-img" href="${part(f, 1)}" download="${esc(f.name)}" title="Download ${esc(f.name)}">
          <img src="${part(f)}" alt="" data-zoom="${part(f)}"><span>${esc(f.name)}</span><small>${KB(f.size)} ⬇</small></a>`
-    : `<a class="mr-file" href="${part(f, 1)}" download="${esc(f.name)}" title="Descargar">📎 <span>${esc(f.name)}</span><small>${KB(f.size)} ⬇</small></a>`).join(""));
+    : `<a class="mr-file" href="${part(f, 1)}" download="${esc(f.name)}" title="Download">📎 <span>${esc(f.name)}</span><small>${KB(f.size)} ⬇</small></a>`).join(""));
   document.querySelectorAll("#mrFiles img[data-zoom]").forEach(i => i.onclick = e => { e.preventDefault(); waZoom(i.dataset.zoom); });
 }
 
-// inicio de sesión: una vez por cuenta; la contraseña de aplicación se prueba en el momento y se guarda en .env
+// sign-in: once per account; the app password is tested on the spot and saved in .env
 function renderMailLogin(m) {
-  const slots = m.slots?.length ? m.slots : [{ slot: "p", label: "principal" }, { slot: "s", label: "secundaria" }];
+  const slots = m.slots?.length ? m.slots : [{ slot: "p", label: "principal" }, { slot: "s", label: "secundaria" }]   // labels are data values;
   setHTML("#mailList", `<li class="mail-login">
-    <p>Una vez por cuenta: <b>1</b> crea una contraseña de aplicación en Google (hace falta la verificación en dos pasos),
-      <b>2</b> pega aquí las 16 letras y dale a Conectar.</p>
+    <p>Once per account: <b>1</b> create an app password in Google (two-step verification is required),
+      <b>2</b> paste the 16 letters here and press Connect.</p>
     ${slots.map(s => `<form class="ml-row" data-slot="${s.slot}" autocomplete="off">
-      <span class="ml-label">${s.label === "principal" ? "Principal" : "Secundaria"} ${s.ok ? "✅" : ""}</span>
-      <input class="input" name="user" value="${esc(s.user || MAIL_DEFAULT[s.slot] || "")}" placeholder="correo@gmail.com">
-      <a class="text-btn" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">1 · Crear contraseña</a>
-      <input class="input" name="password" type="password" placeholder="${s.ok ? "Conectada · pega otra para cambiarla" : "2 · Pega las 16 letras"}">
-      <button class="text-btn ml-go">Conectar</button>
+      <span class="ml-label">${s.label === "principal" ? "Primary" : "Secondary"} ${s.ok ? "✅" : ""}</span>
+      <input class="input" name="user" value="${esc(s.user || MAIL_DEFAULT[s.slot] || "")}" placeholder="you@gmail.com">
+      <a class="text-btn" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">1 · Create password</a>
+      <input class="input" name="password" type="password" placeholder="${s.ok ? "Connected · paste another to change it" : "2 · Paste the 16 letters"}">
+      <button class="text-btn ml-go">Connect</button>
       <small class="ml-msg"></small></form>`).join("")}
-    ${m.configured ? `<button type="button" class="text-btn ml-done">Listo</button>` : ""}</li>`);
+    ${m.configured ? `<button type="button" class="text-btn ml-done">Done</button>` : ""}</li>`);
   $("#mailList .ml-done")?.addEventListener("click", () => { mailLogin = false; $("#mailList").replaceChildren(); renderMail(last.mail); });
   document.querySelectorAll("#mailList .ml-row").forEach(f => f.onsubmit = async e => {
     e.preventDefault();
     const msg = f.querySelector(".ml-msg");
-    msg.className = "ml-msg"; msg.textContent = "Probando…";
+    msg.className = "ml-msg"; msg.textContent = "Testing…";
     let r;
     try {
       r = await (await fetch("/api/mail/login", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slot: f.dataset.slot, user: f.user.value, password: f.password.value }) })).json();
-    } catch { r = { ok: false, error: "Cortex no responde." }; }
+    } catch { r = { ok: false, error: "Cortex is not responding." }; }
     msg.className = "ml-msg " + (r.ok ? "ok" : "bad");
-    msg.textContent = r.ok ? "Conectada ✅" : r.error;
-    if (r.ok && !(r.slots || []).some(s => !s.ok)) mailLogin = false;   // las dos bien: al siguiente refresco sale el correo
+    msg.textContent = r.ok ? "Connected ✅" : r.error;
+    if (r.ok && !(r.slots || []).some(s => !s.ok)) mailLogin = false;   // both fine: the mail shows on the next refresh
     if (r.ok) { f.password.value = ""; last.mail = r; f.querySelector(".ml-label").textContent = f.querySelector(".ml-label").textContent.replace(" ✅", "") + " ✅"; }
   });
 }
 
-// botón «Recargar»: gira mientras mira y repinta con lo que llegue
+// "Refresh" button: spins while checking and repaints with whatever arrives
 async function reloadBtn(b, url, done) {
   if (b.classList.contains("spin")) return;
   b.classList.add("spin");
   try { done(await (await fetch(url, { method: "POST" })).json()); }
-  catch { toast("No he podido recargar"); }
+  catch { toast("Could not refresh"); }
   finally { b.classList.remove("spin"); }
 }
 
@@ -1068,7 +1069,7 @@ async function loadWhatsApp() {
   try { last.whatsapp = await (await fetch("/api/whatsapp")).json(); renderWhatsApp(last.whatsapp); } catch {}
 }
 
-let waQr = "", waOpen = null;   // waOpen: chat abierto en la tarjeta grande
+let waQr = "", waOpen = null;   // waOpen: chat open in the full-size card
 function renderWhatsApp(m) {
   const box = $("#waList");
   if (!box) return;
@@ -1076,43 +1077,43 @@ function renderWhatsApp(m) {
   if (waOpen) { refreshWaChat(); return; }
   const state = $("#waState");
   if (!m.available) {
-    setHTML("#waList", `<li class="setup">Falta el puente de WhatsApp. Reinstala Cortex marcando WhatsApp.</li>`);
+    setHTML("#waList", `<li class="setup">The WhatsApp bridge is missing. Reinstall Cortex with WhatsApp ticked.</li>`);
     state.textContent = "";
     return;
   }
   if (m.qr) {
-    state.textContent = "Vincular";
-    if (waQr !== m.qr || !$("#waQr")) {   // el QR cambia cada ~20 s
+    state.textContent = "Link";
+    if (waQr !== m.qr || !$("#waQr")) {   // the QR changes every ~20 s
       waQr = m.qr;
-      setHTML("#waList", `<li class="wa-qr"><img id="waQr" src="/api/whatsapp/qr.svg?t=${Date.now()}" alt="QR de WhatsApp">
-        <span>En el móvil: WhatsApp → Ajustes → <b>Dispositivos vinculados</b> → Vincular un dispositivo, y escanea esto.</span></li>`);
+      setHTML("#waList", `<li class="wa-qr"><img id="waQr" src="/api/whatsapp/qr.svg?t=${Date.now()}" alt="WhatsApp QR">
+        <span>On your phone: WhatsApp → Settings → <b>Linked devices</b> → Link a device, and scan this.</span></li>`);
     }
     return;
   }
   waQr = "";
   if (m.state !== "connected" && !m.chats.length) {
     state.textContent = "";
-    setHTML("#waList", `<li class="setup">${m.state === "off" ? "Sin vincular: Ajustes → Cerebro → Asistente de configuración." : m.state === "error" ? "El puente se ha caído, lo reintento…" : "Conectando con WhatsApp…"}</li>`);
+    setHTML("#waList", `<li class="setup">${m.state === "off" ? "Not linked: Settings → Brain → Setup assistant." : m.state === "error" ? "The bridge went down, retrying…" : "Connecting to WhatsApp…"}</li>`);
     return;
   }
-  state.textContent = m.state === "connected" ? "" : "Sin conexión";
+  state.textContent = m.state === "connected" ? "" : "Offline";
   const when = t => {
     if (!t) return "";
     const d = new Date(t * 1000), today = new Date().toDateString() === d.toDateString();
-    return today ? d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-                 : d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+    return today ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                 : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
   };
   setHTML("#waList", m.chats.map(c => `<li data-chat="${esc(c.jid)}" class="${c.mine ? "mine" : "theirs"}${c.muted ? " muted" : ""}">
       <div><b>${c.group ? "👥 " : ""}${esc(c.name)}${c.real !== c.name ? ` <em>${esc(c.real)}</em>` : ""}</b>
-      <span>${c.mine ? "Tú: " : c.from ? esc(c.from) + ": " : ""}${esc(c.text)}</span></div>
+      <span>${c.mine ? "You: " : c.from ? esc(c.from) + ": " : ""}${esc(c.text)}</span></div>
       <small>${esc(waWhen(c.time))}</small>
-      ${waBell(c)}</li>`).join("") || `<li class="setup">Sincronizando chats…</li>`);
+      ${waBell(c)}</li>`).join("") || `<li class="setup">Syncing chats…</li>`);
 }
 
-// campanita: avisa / silenciado
+// bell: notifies / muted
 function waBell(c) {
   return `<button class="wa-bell" data-mute="${esc(c.jid)}" data-name="${esc(c.real || c.name)}" data-muted="${c.muted ? 1 : 0}"
-    title="${c.muted ? "Silenciado: no avisa. Toca para que avise" : "Avisa. Toca para silenciar"}">${c.muted ? "🔕" : "🔔"}</button>`;
+    title="${c.muted ? "Muted: no notifications. Tap to turn them on" : "Notifies. Tap to mute"}">${c.muted ? "🔕" : "🔔"}</button>`;
 }
 async function waToggleMute(b) {
   const muted = b.dataset.muted !== "1";
@@ -1121,48 +1122,48 @@ async function waToggleMute(b) {
   b.closest("li")?.classList.toggle("muted", muted);
   await fetch("/api/whatsapp/mute", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jid: b.dataset.mute, name: b.dataset.name, muted }) });
-  toast(muted ? "Silenciado: no te avisará" : "Te avisará de este chat");
+  toast(muted ? "Muted: you will not be notified" : "You will be notified about this chat");
 }
 
 function waWhen(t, timeOnly) {
   if (!t) return "";
   const d = new Date(t * 1000), today = new Date().toDateString() === d.toDateString();
-  return today || timeOnly ? d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
-                           : d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
+  return today || timeOnly ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                           : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
 }
 
-// un chat abierto: cabecera con el mote y los mensajes; los seguidos de la misma persona van sin repetir el nombre
+// an open chat: header with the nickname and the messages; consecutive ones from the same person do not repeat the name
 async function openWaChat(jid) {
   waOpen = jid;
   $("#waState").textContent = "";
   setHTML("#waList", `<li class="wa-chat">
-      <div class="wa-chat-head"><button class="icon-btn" id="waBack" title="Volver">‹</button>
+      <div class="wa-chat-head"><button class="icon-btn" id="waBack" title="Back">‹</button>
         <b id="waName"></b><span id="waBellBox"></span>
-        <input class="input" id="waMote" placeholder="Mote (cómo lo dice Cortex)" autocomplete="off">
-        <button class="text-btn" id="waSum">Resumir</button></div>
+        <input class="input" id="waMote" placeholder="Nickname (how Cortex says it)" autocomplete="off">
+        <button class="text-btn" id="waSum">Summarize</button></div>
       <div class="wa-msgs" id="waMsgs"></div>
-      ${settings.whatsapp_mode === "write" ? `<form class="with-btn" id="waSend"><input class="input" name="text" maxlength="4000" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" autocomplete="off"><button class="btn primary">Enviar</button></form>` : ""}</li>`);
+      ${settings.whatsapp_mode === "write" ? `<form class="with-btn" id="waSend"><input class="input" name="text" maxlength="4000" placeholder="Type a message" aria-label="Type a message" autocomplete="off"><button class="btn primary">Send</button></form>` : ""}</li>`);
   if ($("#waSend")) $("#waSend").onsubmit = async e => {
     e.preventDefault();
     const f = e.target, text = f.text.value.trim(), b = f.querySelector("button");
     if (!text || b.disabled) return;
-    b.disabled = true;   // un doble Enter no lo manda dos veces
+    b.disabled = true;   // a double Enter does not send it twice
     let r = {};
     try { r = await (await fetch("/api/whatsapp/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jid, text }) })).json(); } catch {}
     b.disabled = false;
-    if (!r.ok) { toast(r.error || "No sé si ha salido: míralo en el móvil."); return; }
+    if (!r.ok) { toast(r.error || "Not sure it went out: check your phone."); return; }
     f.text.value = "";
     if (waOpen === jid) refreshWaChat(true);
   };
   $("#waBack").onclick = () => { waOpen = null; renderWhatsApp(last.whatsapp); };
-  $("#waSum").onclick = () => send({ action: "text", text: `Resúmeme lo último del chat de WhatsApp «${$("#waName").dataset.real}».` });
+  $("#waSum").onclick = () => send({ action: "text", text: `Summarize the latest in the WhatsApp chat "${$("#waName").dataset.real}".` });
   $("#waMote").onkeydown = async e => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     await fetch("/api/whatsapp/mote", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: $("#waName").dataset.real, mote: e.target.value }) });
     e.target.blur();
-    toast(e.target.value.trim() ? `Cortex lo llamará «${e.target.value.trim()}»` : "Mote quitado");
+    toast(e.target.value.trim() ? `Cortex will call them "${e.target.value.trim()}"` : "Nickname removed");
   };
   await refreshWaChat(true);
 }
@@ -1177,8 +1178,8 @@ function waBody(m) {
 }
 
 function waGone(el) {
-  const what = el.tagName === "AUDIO" ? "🎤 Nota de voz" : el.classList.contains("wa-sticker") ? "Sticker" : "📷 Foto";
-  el.replaceWith(Object.assign(document.createElement("p"), { className: "wa-gone", textContent: `${what} (WhatsApp ya no la tiene)` }));
+  const what = el.tagName === "AUDIO" ? "🎤 Voice note" : el.classList.contains("wa-sticker") ? "Sticker" : "📷 Photo";
+  el.replaceWith(Object.assign(document.createElement("p"), { className: "wa-gone", textContent: `${what} (WhatsApp no longer has it)` }));
 }
 
 function waZoom(src) {
@@ -1186,7 +1187,7 @@ function waZoom(src) {
   box.innerHTML = `<img src="${esc(src)}" alt="">`;
   const close = e => {
     if (e.type === "keydown" && e.key !== "Escape") return;
-    e.stopImmediatePropagation();   // Escape cierra la foto, no la tarjeta
+    e.stopImmediatePropagation();   // Escape closes the photo, not the card
     box.remove(); removeEventListener("keydown", close, true);
   };
   box.onclick = close;
@@ -1204,45 +1205,45 @@ async function refreshWaChat(first) {
   if (first) setHTML("#waBellBox", waBell(c));
   if (first) $("#waMote").value = c.name !== c.real ? c.name : "";
   const box = $("#waMsgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  const players = {};   // audios y fotos se conservan al refrescar (si no, se cortarían o parpadearían)
+  const players = {};   // audio and photos are kept on refresh (otherwise they would cut off or flicker)
   box.querySelectorAll("audio[data-id], img[data-id]").forEach(a => { players[a.dataset.id] = a; });
   let prev = null, day = "";
   box.innerHTML = c.messages.map(m => {
-    const d = new Date(m.time * 1000).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" });
+    const d = new Date(m.time * 1000).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
     const who = m.mine ? "·yo·" : m.from;
     let out = d !== day ? `<div class="wa-day">${esc(d)}</div>` : "";
-    const same = who === prev && d === day;   // doble mensaje: sin repetir el nombre
+    const same = who === prev && d === day;   // consecutive message: do not repeat the name
     day = d; prev = who;
     out += `<div class="wa-msg ${m.mine ? "mine" : ""} ${same ? "cont" : ""}">
       ${!same && !m.mine && c.group ? `<b>${esc(m.from)}</b>` : ""}${waBody(m)}<small>${esc(waWhen(m.time, true))}</small></div>`;
     return out;
-  }).join("") || `<div class="wa-day">Sin mensajes guardados</div>`;
+  }).join("") || `<div class="wa-day">No saved messages</div>`;
   box.querySelectorAll("audio[data-id], img[data-id]").forEach(a => {
     const old = players[a.dataset.id];
     if (old) { a.replaceWith(old); return; }
     a.addEventListener("error", () => waGone(a), { once: true });
     if (a.tagName === "IMG") {
       a.onclick = () => waZoom(a.src);
-      a.addEventListener("load", () => { if (stick) box.scrollTop = box.scrollHeight; });   // al cargar crecen
+      a.addEventListener("load", () => { if (stick) box.scrollTop = box.scrollHeight; });   // they grow when they load
     }
   });
   const stick = first || atBottom;
   if (stick) box.scrollTop = box.scrollHeight;
 }
 
-// ---------- modo silencio ----------
+// ---------- quiet mode ----------
 function renderQuiet(on) {
   const chip = $("#quietChip");
-  chip.textContent = on ? "🔕 Silencio" : "🔔";
+  chip.textContent = on ? "🔕 Quiet" : "🔔";
   chip.classList.toggle("on", !!on);
 }
 
-// ---------- dispositivos ----------
-const DEV_TYPES = { Computer: "ordenador", Speaker: "altavoz", Smartphone: "móvil", TV: "tele", CastVideo: "Chromecast" };
+// ---------- devices ----------
+const DEV_TYPES = { Computer: "computer", Speaker: "speaker", Smartphone: "phone", TV: "TV", CastVideo: "Chromecast" };
 
 async function loadDevices(scan = false) {
   if (!$("#devMusic")) return;
-  if (scan) setHTML("#devLan", `<li class="r-empty">Buscando en la red…</li>`);
+  if (scan) setHTML("#devLan", `<li class="r-empty">Scanning the network…</li>`);
   try {
     const r = await (await fetch(scan ? "/api/devices/scan" : "/api/devices", { method: scan ? "POST" : "GET" })).json();
     renderDevices(r);
@@ -1251,17 +1252,17 @@ async function loadDevices(scan = false) {
 
 function renderDevices(r) {
   setHTML("#devMusic", r.music.map(d => `<li class="pick ${d.active ? "on" : ""}" data-dev="${esc(d.id)}"><span class="dot"></span>
-    ${esc(d.name)}<small>${d.active ? "sonando aquí" : esc(DEV_TYPES[d.type] || d.type.toLowerCase())}</small></li>`).join("")
-    || `<li class="r-empty">Abre Spotify en algún aparato (o di «pon música») y aparecerá aquí.</li>`);
+    ${esc(d.name)}<small>${d.active ? "playing here" : esc(DEV_TYPES[d.type] || d.type.toLowerCase())}</small></li>`).join("")
+    || `<li class="r-empty">Open Spotify on any device (or say "play music") and it will show up here.</li>`);
   setHTML("#devLan", r.lan.map(d => `<li><span class="dot"></span>${esc(d.name)}<small>${esc(d.kinds.join(" · "))}<br>${esc(d.ip)}</small></li>`).join("")
-    || `<li class="r-empty">${r.scanned_at ? "No he visto nada" : "Buscando…"}</li>`);
+    || `<li class="r-empty">${r.scanned_at ? "Nothing found" : "Scanning…"}</li>`);
 }
 
 function renderCompra(items) {
   if (!$("#compraList")) return;
   items = items || [];
   setHTML("#compraList", items.map((it, i) => `<li data-i="${i}" class="${it.done ? "done" : ""}"><i></i><span>${esc(it.text)}</span></li>`).join("")
-    || `<li class="r-empty" style="cursor:default">Vacía. Di «Cortex, añade leche a la lista».</li>`);
+    || `<li class="r-empty" style="cursor:default">Empty. Say "Cortex, add milk to the list".</li>`);
   $("#compraClear").hidden = !items.some(i => i.done);
 }
 
@@ -1272,8 +1273,8 @@ async function compraCmd(body) {
   } catch {}
 }
 
-// ---------- avisos ----------
-const REPEAT_TEXT = { diario: "cada día", laborables: "laborables", findes: "fines de semana", semanal: "cada semana", mensual: "cada mes" };
+// ---------- reminders ----------
+const REPEAT_TEXT = { diario: "every day", laborables: "weekdays", findes: "weekends", semanal: "every week", mensual: "every month" };
 
 async function loadAvisos() {
   try { last.avisos = await (await fetch("/api/avisos")).json(); renderAvisos(last.avisos); } catch {}
@@ -1285,14 +1286,14 @@ function renderAvisos(items) {
   list.innerHTML = items.length ? items.map(a => `<li>
       <span class="when">${esc(a.di)}</span>
       <div><div>${esc(a.texto)}</div>${a.repetir ? `<small>${esc(REPEAT_TEXT[a.repetir] || a.repetir)}</small>` : ""}</div>
-      <button class="icon-btn small del" data-id="${esc(a.id)}" title="Borrar"><svg><use href="#i-trash"/></svg></button>
-    </li>`).join("") : `<li class="empty">Sin avisos. Di «Cortex, recuérdame…»</li>`;
+      <button class="icon-btn small del" data-id="${esc(a.id)}" title="Delete"><svg><use href="#i-trash"/></svg></button>
+    </li>`).join("") : `<li class="empty">No reminders. Say "Cortex, remind me…"</li>`;
   for (const b of $$(".del", list)) {
     b.addEventListener("click", async () => {
-      // borrar pide confirmación: primer toque arma, segundo borra
+      // deleting asks for confirmation: first tap arms, second deletes
       if (!b.classList.contains("armed")) {
         b.classList.add("armed");
-        b.title = "Toca otra vez para borrar";
+        b.title = "Tap again to delete";
         setTimeout(() => b.classList.remove("armed"), 3000);
         return;
       }
@@ -1324,8 +1325,8 @@ async function submitAviso(e) {
   f.hidden = true;
 }
 
-// ---------- tiempo ----------
-const WDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+// ---------- weather ----------
+const WDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function wIcon(name, day = true) {
   const n = !day && name === "sun" ? "moon" : name;
   return n === "moon" ? "#i-moon" : `#w-${name}`;
@@ -1343,38 +1344,38 @@ function renderWeather(w) {
   chip.hidden = false;
   chip.querySelector("use").setAttribute("href", wIcon(w.icon, w.day));
   chip.querySelector("b").textContent = `${w.temp}°`;
-  chip.title = `${w.place}: ${w.text}, sensación ${w.feels}°`;
+  chip.title = `${w.place}: ${w.text}, feels like ${w.feels}°`;
   $("#ambWeather").innerHTML = `<svg><use href="${wIcon(w.icon, w.day)}"/></svg>${w.temp}° · ${esc(w.text)}`;
   if (!$("#wTemp")) return;
   $("#wPlace").textContent = w.place;
   $("#wIcon use").setAttribute("href", wIcon(w.icon, w.day));
   $("#wTemp").textContent = `${w.temp}°`;
-  $("#wText").textContent = `${w.text} · sensación ${w.feels}° · viento ${w.wind} km/h`;
+  $("#wText").textContent = `${w.text} · feels like ${w.feels}° · wind ${w.wind} km/h`;
   $("#wHours").innerHTML = w.hours.slice(0, 6).map(h => `<div>${h.hour.slice(0, 2)}h<svg><use href="${wIcon(h.icon, h.day)}"/></svg><b>${h.temp}°</b>${h.rain >= 20 ? `<span class="rain">${h.rain}%</span>` : ""}</div>`).join("");
   $("#wDays").innerHTML = w.days.slice(1, 4).map(d => `<div>${WDAYS[new Date(d.date + "T12:00").getDay()]}<svg><use href="${wIcon(d.icon)}"/></svg><b>${d.max}° <span class="note">${d.min}°</span></b>${d.rain >= 20 ? `<span class="rain">${d.rain}%</span>` : ""}</div>`).join("");
 }
 
-// ---------- gestos y cámara ----------
+// ---------- gestures and camera ----------
 function gestureName(id) {
-  return id?.startsWith("custom:") ? `«${id.slice(7)}» (propio)` : GESTURES[id] || id;
+  return id?.startsWith("custom:") ? `"${id.slice(7)}" (custom)` : GESTURES[id] || id;
 }
 
 function renderVision(v) {
   if (!v || v.enabled === undefined) return;
-  // un solo botón de cámara arriba: verde cuando te ve (los gestos funcionan), tachado sin cámara
+  // a single camera button on top: green when it sees you (gestures work), crossed out without a camera
   const cam = $("#cameraBtn");
   cam.classList.toggle("engaged", !!(v.enabled && v.camera_ok && v.engaged));
   cam.classList.toggle("off", !v.enabled || !v.camera_ok);
-  cam.title = !v.enabled ? "Ver cámara y gestos (gestos apagados)" : !v.camera_ok ? "Ver cámara (no encuentro la cámara)"
-    : v.engaged ? "Te veo: los gestos funcionan · ver cámara" : "Ver cámara y gestos (mira a la pantalla para usarlos)";
+  cam.title = !v.enabled ? "View camera and gestures (gestures off)" : !v.camera_ok ? "View camera (camera not found)"
+    : v.engaged ? "I see you: gestures work · view camera" : "View camera and gestures (look at the screen to use them)";
 
   const st = $("#gState");
   if (st) {
     st.className = `g-state ${!v.enabled ? "" : v.camera_ok ? (v.engaged ? "on" : "") : "off"}`;
-    st.querySelector("span").textContent = !v.enabled ? "Gestos apagados" : !v.camera_ok ? "No encuentro la cámara"
-      : v.engaged ? "Te veo: haz un gesto" : settings.gestures_require_look ? "Mira a la pantalla para activar" : "Esperando una mano";
+    st.querySelector("span").textContent = !v.enabled ? "Gestures off" : !v.camera_ok ? "Camera not found"
+      : v.engaged ? "I see you: make a gesture" : settings.gestures_require_look ? "Look at the screen to activate" : "Waiting for a hand";
     const e = v.last_event;
-    $("#gLast").innerHTML = e?.gesture ? `Último: <b>${esc(gestureName(e.gesture))}</b> → ${esc(ACTIONS[e.action] || e.action)}` : "";
+    $("#gLast").innerHTML = e?.gesture ? `Last: <b>${esc(gestureName(e.gesture))}</b> → ${esc(ACTIONS[e.action] || e.action)}` : "";
   }
   const map = $("#gMap");
   if (map) {
@@ -1382,7 +1383,7 @@ function renderVision(v) {
     const ids = [...Object.keys(GESTURES), ...(v.custom || []).map(c => `custom:${c.name || c}`)];
     map.innerHTML = ids.filter(id => actions[id] && actions[id] !== "none")
       .map(id => `<li data-g="${esc(id)}"><span>${esc(gestureName(id))}</span><span>${esc(ACTIONS[actions[id]] || actions[id])}</span></li>`).join("")
-      || `<li><span>Ningún gesto asignado</span></li>`;
+      || `<li><span>No gestures assigned</span></li>`;
   }
   if (!$("#cameraModal").hidden) renderCameraSide(v);
   if (!$("#drawer").hidden && JSON.stringify(v.custom) !== JSON.stringify(lastCustom)) renderGestureTable();
@@ -1392,11 +1393,11 @@ function renderVision(v) {
 
 function renderCameraSide(v) {
   const rows = [
-    ["Cámara", v.camera_ok, v.camera_ok ? `${v.fps ?? "?"} fps` : (v.error || "sin cámara")],
-    ["Mirada", v.looking, v.looking ? "mirando a la pantalla" : "no miras"],
-    ["Ángulo", null, v.yaw == null ? "—" : `giro ${Math.round(v.yaw)}° · inclinación ${Math.round(v.pitch)}°`],
-    ["Gestos", v.engaged, v.engaged ? "activos" : "en espera"],
-    ["Mano", v.hand, v.hand ? `${gestureName(v.label) || "—"} ${v.score ? Math.round(v.score * 100) + "%" : ""}` : "no veo ninguna"],
+    ["Camera", v.camera_ok, v.camera_ok ? `${v.fps ?? "?"} fps` : (v.error || "no camera")],
+    ["Gaze", v.looking, v.looking ? "looking at the screen" : "not looking"],
+    ["Angle", null, v.yaw == null ? "—" : `yaw ${Math.round(v.yaw)}° · pitch ${Math.round(v.pitch)}°`],
+    ["Gestures", v.engaged, v.engaged ? "active" : "waiting"],
+    ["Hand", v.hand, v.hand ? `${gestureName(v.label) || "—"} ${v.score ? Math.round(v.score * 100) + "%" : ""}` : "none in view"],
   ];
   $("#visionList").replaceChildren(...rows.map(([label, ok, value]) => {
     const li = document.createElement("li");
@@ -1413,8 +1414,8 @@ function renderCameraSide(v) {
   const res = v.record_result;
   if (res && res !== lastRecResult && JSON.stringify(res) !== JSON.stringify(lastRecResult)) {
     if (lastRecResult !== undefined) {
-      if (res.ok) { toastOk(`Gesto «${res.name}» guardado (${res.frames} muestras). Asígnale una acción en Ajustes → Gestos.`); $("#customName").value = ""; }
-      else toast(res.error || "No vi bien la mano: prueba otra vez.");
+      if (res.ok) { toastOk(`Gesture "${res.name}" saved (${res.frames} samples). Assign it an action in Settings → Gestures.`); $("#customName").value = ""; }
+      else toast(res.error || "Could not see the hand clearly: try again.");
     }
   }
   lastRecResult = res;
@@ -1428,7 +1429,7 @@ function onGesture(m) {
   wakeUp();
   const name = gestureName(m.gesture);
   const action = ACTIONS[m.action] || m.action;
-  gestureLog.unshift(`<div>${new Date().toLocaleTimeString("es-ES")} · <b>${esc(name)}</b> → ${esc(action)}</div>`);
+  gestureLog.unshift(`<div>${new Date().toLocaleTimeString("en-GB")} · <b>${esc(name)}</b> → ${esc(action)}</div>`);
   gestureLog.length = Math.min(gestureLog.length, 30);
   $("#gestureLog").innerHTML = gestureLog.join("");
   if (m.action === "none") return;
@@ -1451,7 +1452,7 @@ function openCamera() {
 
 function closeCamera() {
   $("#cameraModal").hidden = true;
-  $("#cameraImg").removeAttribute("src");   // corta el vídeo: deja de gastar CPU
+  $("#cameraImg").removeAttribute("src");   // stops the stream: no more CPU use
 }
 
 async function recordCustom() {
@@ -1481,7 +1482,7 @@ function renderGestureTable() {
       const del = document.createElement("button");
       del.type = "button";
       del.className = "icon-btn small";
-      del.title = "Borrar gesto";
+      del.title = "Delete gesture";
       del.innerHTML = `<svg><use href="#i-trash"/></svg>`;
       del.addEventListener("click", async () => {
         await fetch("/api/gestures/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: id.slice(7) }) });
@@ -1492,7 +1493,7 @@ function renderGestureTable() {
   }));
 }
 
-// ---------- reposo ----------
+// ---------- idle ----------
 function wakeUp() {
   lastActivity = Date.now();
   if (!$("#ambient").hidden) showAmbient(false);
@@ -1503,14 +1504,14 @@ function showAmbient(on) {
   if (on) tick();
 }
 
-// ---------- editar datos (tareas, comidas…) ----------
+// ---------- edit data (tasks, meals…) ----------
 const EDIT_GROUPS = {
   tareas: ["tareas"], horario: ["horario"], betis: ["betis"], gym: ["gym"],
   comidas: ["comidas", "compra"], dinero: ["dinero"], fechas: ["fechas"],
 };
 const EDIT_LABELS = {
-  tareas: "Tareas", horario: "Horario", betis: "Betis", gym: "Gym", comidas: "Comidas",
-  compra: "Lista de la compra", dinero: "Dinero", fechas: "Fechas",
+  tareas: "Tasks", horario: "Schedule", betis: "Betis", gym: "Gym", comidas: "Meals",
+  compra: "Shopping list", dinero: "Money", fechas: "Dates",
 };
 let editing = { name: null, original: "" };
 
@@ -1534,7 +1535,7 @@ async function loadEditFile(name) {
   if (editing.name && $("#editText").value !== editing.original && !confirmDiscard()) return;
   $("#editError").textContent = "";
   $$("#editTabs button").forEach(b => b.classList.toggle("sel", b.dataset.file === name));
-  $("#editModal h2").textContent = "Editar · " + (EDIT_LABELS[name] || name);
+  $("#editModal h2").textContent = "Edit · " + (EDIT_LABELS[name] || name);
   try {
     const r = await (await fetch(`/api/file/${name}`)).json();
     if (!r.ok) throw new Error(r.error);
@@ -1544,16 +1545,16 @@ async function loadEditFile(name) {
     $("#editText").setSelectionRange(0, 0);
     $("#editText").scrollTop = 0;
   } catch (e) {
-    $("#editError").textContent = "No pude abrirlo: " + e.message;
+    $("#editError").textContent = "Could not open it: " + e.message;
   }
 }
 
 let discardArmed = 0;
 function confirmDiscard() {
-  // sin diálogos del navegador: segundo intento en 4 s = descartar
+  // no browser dialogs: a second try within 4 s = discard
   if (Date.now() - discardArmed < 4000) return true;
   discardArmed = Date.now();
-  $("#editError").textContent = "Hay cambios sin guardar. Vuelve a pulsar para descartarlos.";
+  $("#editError").textContent = "You have unsaved changes. Press again to discard them.";
   return false;
 }
 
@@ -1572,11 +1573,11 @@ async function saveEditor() {
       body: JSON.stringify({ text: $("#editText").value }),
     })).json();
     if (!r.ok) { $("#editError").textContent = r.error; return; }
-    toastOk(`Guardado: ${EDIT_LABELS[editing.name] || editing.name}`);
+    toastOk(`Saved: ${EDIT_LABELS[editing.name] || editing.name}`);
     closeEditor(true);
     loadData();
   } catch (e) {
-    $("#editError").textContent = "No pude guardar: " + e.message;
+    $("#editError").textContent = "Could not save: " + e.message;
   } finally {
     btn.disabled = false;
   }
@@ -1592,7 +1593,7 @@ function checkAmbient() {
   if (Date.now() - lastActivity > minutes * 60_000) showAmbient(true);
 }
 
-// ---------- ajustes ----------
+// ---------- settings ----------
 function modelName(m) {
   return { haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }[m] || m;
 }
@@ -1638,15 +1639,15 @@ async function openSettings() {
   $("#drawer").hidden = false;
 }
 
-// ---------- Ajustes → Vídeo: webs guardadas y cuentas ----------
+// ---------- Settings → Video: saved sites and accounts ----------
 async function loadWebAccounts() {
   try {
     const [acc, s] = await Promise.all([fetch("/api/web/accounts").then(r => r.json()), fetch("/api/settings").then(r => r.json()).then(r => r.settings)]);
     $("#accList").innerHTML = acc.map(a => `<li><b>${esc(a.site)}</b><span>${esc(a.user)}</span>
-      <button type="button" class="text-btn" data-acc-del="${esc(a.site)}">Quitar</button></li>`).join("")
-      || `<li class="note">Ninguna todavía.</li>`;
+      <button type="button" class="text-btn" data-acc-del="${esc(a.site)}">Remove</button></li>`).join("")
+      || `<li class="note">None yet.</li>`;
     $("#webList").innerHTML = (s.video_services || []).map(v => `<li><b>${esc(v.name)}</b><span>${esc(v.domains.join(", "))}</span>
-      <button type="button" class="text-btn" data-web-del="${esc(v.name)}">Quitar</button></li>`).join("");
+      <button type="button" class="text-btn" data-web-del="${esc(v.name)}">Remove</button></li>`).join("");
     for (const b of $$("[data-acc-del]")) b.onclick = async () => {
       await fetch("/api/web/accounts/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ site: b.dataset.accDel }) });
       loadWebAccounts();
@@ -1679,22 +1680,22 @@ function fillSelect(select, values, current, labels = {}) {
 
 function voiceName(v) {
   const m = /^([a-z]{2}-[A-Z]{2})-(\w+?)(Multilingual)?Neural$/.exec(v || "");
-  return m ? `${m[2]} (${m[1]}${m[3] ? ", multilingüe" : ""})` : v;
+  return m ? `${m[2]} (${m[1]}${m[3] ? ", multilingual" : ""})` : v;
 }
 
 function fillSettings({ settings: s, devices, options }) {
   applySettings(s);
   const f = $("#settingsForm");
-  const def = { "": "Predeterminado de Windows" };
+  const def = { "": "Windows default" };
   fillSelect(f.mic_device, ["", ...devices.inputs], s.mic_device ?? "", def);
   fillSelect(f.speaker_device, ["", ...devices.outputs], s.speaker_device ?? "", def);
   fillSelect(f.voice_es, options.voices.es, s.voice_es);
   fillSelect(f.stt_model, options.stt, s.stt_model,
-    { parakeet: "Parakeet (rápido, recomendado)", "whisper-small": "Whisper small (lento)", "whisper-base": "Whisper base" });
+    { parakeet: "Parakeet (fast, recommended)", "whisper-small": "Whisper small (slow)", "whisper-base": "Whisper base" });
   fillSelect(f.claude_model, options.claude, s.claude_model,
-    { haiku: "Haiku (el más rápido)", sonnet: "Sonnet (más listo, más lento)", opus: "Opus (el más listo, lento)" });
+    { haiku: "Haiku (fastest)", sonnet: "Sonnet (smarter, slower)", opus: "Opus (smartest, slow)" });
   fillSelect(f.spotify_device, ["", ...(spotifyDevices || [])], s.spotify_device ?? "",
-    { "": "Este portátil (Spotify de escritorio)" });
+    { "": "This laptop (desktop Spotify)" });
   f.tts_engine.value = s.tts_engine;
   f.tts_rate.value = s.tts_rate;
   $("#rateOut").textContent = `${s.tts_rate > 0 ? "+" : ""}${s.tts_rate}%`;
@@ -1731,24 +1732,24 @@ function onSettingChange(e) {
   saveSettings({ [el.name]: value });
 }
 
-// ---------- arranque ----------
-const DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+// ---------- startup ----------
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function tick() {
   const now = new Date();
-  const time = now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   $("#clock").textContent = time;
   $("#ambClock").textContent = time;
   const day = DAYS[now.getDay()];
-  const date = `${day[0].toUpperCase()}${day.slice(1)}, ${now.getDate()} de ${MONTHS[now.getMonth()]}`;
+  const date = `${day}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   $("#date").textContent = date;
   $("#ambDate").textContent = date;
   const h = now.getHours();
-  $("#greeting").textContent = h < 6 ? "Buenas noches" : h < 13 ? "Buenos días" : h < 21 ? "Buenas tardes" : "Buenas noches";
+  $("#greeting").textContent = h < 6 ? "Good night" : h < 13 ? "Good morning" : h < 21 ? "Good afternoon" : "Good evening";
 }
 
-/** Controles dentro de los widgets (se vuelven a enlazar cuando se añaden tarjetas). */
+/** Controls inside the widgets (re-bound whenever cards are added). */
 function bindWidgetControls() {
   const bind = (el, ev, fn) => { if (el && !el.dataset.bound) { el.addEventListener(ev, fn); el.dataset.bound = "1"; } };
   bind($("#newChatBtn"), "click", () => send({ action: "new_conversation" }));
@@ -1816,11 +1817,11 @@ function bindWidgetControls() {
     const bell = e.target.closest("[data-mute]");
     if (bell) { e.stopPropagation(); waToggleMute(bell); return; }
     const li = e.target.closest("[data-chat]");
-    if (li) openWaChat(li.dataset.chat);   // la tarjeta se abre en grande y enseña el chat
+    if (li) openWaChat(li.dataset.chat);   // the card opens full size and shows the chat
   });
   bind($("#mailList"), "click", e => {
     const li = e.target.closest("[data-mail]");
-    if (li) openMail(li.dataset.mail);   // la tarjeta se abre en grande con el correo entero
+    if (li) openMail(li.dataset.mail);   // the card opens full size with the whole email
   });
   bind($("#devMusic"), "click", async e => {
     const li = e.target.closest("[data-dev]");
@@ -1869,10 +1870,10 @@ async function init() {
   $("#accSave").addEventListener("click", async () => {
     const body = { site: $("#accSite").value.trim(), user: $("#accUser").value.trim(), password: $("#accPass").value };
     const r = await (await fetch("/api/web/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
-    $("#accMsg").textContent = r.ok ? `Guardada la cuenta de ${r.site}.` : r.error;
+    $("#accMsg").textContent = r.ok ? `Account for ${r.site} saved.` : r.error;
     if (r.ok) { $("#accPass").value = ""; $("#accUser").value = ""; $("#accSite").value = ""; loadWebAccounts(); }
   });
-  $("#morningChip").addEventListener("click", () => send({ action: "text", text: "Dame mi resumen matinal." }));
+  $("#morningChip").addEventListener("click", () => send({ action: "text", text: "Give me my morning summary." }));
   $("#fullBtn").addEventListener("click", toggleFullscreen);
   $("#closeDrawer").addEventListener("click", () => ($("#drawer").hidden = true));
   $("#cameraModal").addEventListener("click", e => { if (e.target === e.currentTarget || e.target.closest("[data-close]")) closeCamera(); });
@@ -1925,7 +1926,7 @@ async function init() {
   });
   $("#editSave").addEventListener("click", saveEditor);
   $("#editText").addEventListener("keydown", e => {
-    if (e.key === "Tab") {   // tabulador = dos espacios (YAML no admite tabuladores)
+    if (e.key === "Tab") {   // Tab = two spaces (YAML does not allow tabs)
       e.preventDefault();
       e.target.setRangeText("  ", e.target.selectionStart, e.target.selectionEnd, "end");
     }
@@ -1943,14 +1944,14 @@ async function init() {
       else if (!$("#cameraModal").hidden) closeCamera();
       else if (!$("#drawer").hidden) $("#drawer").hidden = true;
       else if (document.body.classList.contains("editing")) setEditing(false);
-      else if (focused) return;   // ya la cierra setFocus
+      else if (focused) return;   // setFocus already closes it
       else send({ action: "stop" });
     }
     if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); }
   });
   connect();
   loadData();
-  setInterval(loadBank, 30 * 60_000);   // del caché del servidor: no gasta consultas al banco
+  setInterval(loadBank, 30 * 60_000);   // served from the server cache: no bank queries used
   loadTimers();
   loadCompra();
   loadDevices();
@@ -1963,8 +1964,8 @@ async function init() {
     renderQuiet(r.quiet);
   });
   setInterval(renderTimers, 1000);
-  setInterval(loadCompra, 5 * 60_000);    // por si Cortex (Claude) la cambia editando el archivo
-  const editHash = location.hash.match(/^#edit=(\w+)/);   // p. ej. /#edit=tareas abre el editor
+  setInterval(loadCompra, 5 * 60_000);    // in case Cortex (Claude) changes it by editing the file
+  const editHash = location.hash.match(/^#edit=(\w+)/);   // e.g. /#edit=tareas opens the editor
   if (editHash) openEditor(editHash[1]);
   loadWeather();
   loadAvisos();

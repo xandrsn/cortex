@@ -1,10 +1,10 @@
-"""Correo de Gmail (dos cuentas: principal y secundaria): avisa de los nuevos, los lee, envía y responde.
+"""Gmail (two accounts: primary and secondary): announces new mail, reads, sends and replies.
 
-Por IMAP (leer) y SMTP (enviar) con una «contraseña de aplicación» por cuenta, en .env (nunca en Drive):
-  GMAIL_USER / GMAIL_APP_PASSWORD          → principal (desde aquí se envía si no se dice otra)
-  GMAIL_USER_2 / GMAIL_APP_PASSWORD_2      → secundaria
-Se crean en myaccount.google.com → Seguridad → Contraseñas de aplicaciones (hace falta la verificación en dos
-pasos). El buzón se abre en solo lectura y con PEEK: mirar no marca nada como leído.
+IMAP (read) and SMTP (send) with one "app password" per account, kept in .env (never in Drive):
+  GMAIL_USER / GMAIL_APP_PASSWORD          -> primary (mail is sent from here unless another is named)
+  GMAIL_USER_2 / GMAIL_APP_PASSWORD_2      -> secondary
+Create them at myaccount.google.com -> Security -> App passwords (2-step verification is required). The mailbox
+is opened read-only with PEEK: looking never marks anything as read.
 """
 
 import email
@@ -44,7 +44,7 @@ def _decode(value: str | None) -> str:
 
 
 def _text_of(msg: email.message.Message) -> str:
-    """Texto plano del correo (o el HTML sin etiquetas si no hay otro)."""
+    """Plain text of the mail (or the HTML stripped of tags if there is no plain part)."""
     plain, html = None, None
     for part in msg.walk() if msg.is_multipart() else [msg]:
         if part.get_content_maintype() == "multipart" or part.get("Content-Disposition", "").startswith("attachment"):
@@ -71,7 +71,7 @@ def _payload(part: email.message.Message) -> bytes:
 
 
 def _parts(msg: email.message.Message) -> list[email.message.Message]:
-    """Las partes «hoja» del correo, en orden: su índice es el n de /api/mail/part."""
+    """The leaf parts of the mail, in order: the index is the n of /api/mail/part."""
     return [p for p in (msg.walk() if msg.is_multipart() else [msg]) if p.get_content_maintype() != "multipart"]
 
 
@@ -100,7 +100,7 @@ ENV_FILE = ROOT / ".env"
 
 
 def test_login(user: str, password: str) -> str | None:
-    """Prueba usuario + contraseña de aplicación contra Gmail. None si entra; si no, el motivo en castellano."""
+    """Test user + app password against Gmail. None if it gets in; otherwise the reason."""
     try:
         box = imaplib.IMAP4_SSL(HOST, timeout=20)
         try:
@@ -113,17 +113,17 @@ def test_login(user: str, password: str) -> str | None:
     except imaplib.IMAP4.error as e:
         msg = str(e)
         if "Application-specific password required" in msg:
-            return "Google pide una contraseña de aplicación: esa es la contraseña normal de la cuenta."
+            return "Google requires an app password: that is the account's normal password."
         if "Invalid credentials" in msg or "AUTHENTICATIONFAILED" in msg:
-            return "Google dice que el correo o la contraseña no son correctos."
-        return f"Google no deja entrar: {msg[:120]}"
+            return "Google says the email or password is wrong."
+        return f"Google will not let you in: {msg[:120]}"
     except OSError:
-        return "No hay conexión con Gmail."
+        return "No connection to Gmail."
     return None
 
 
 def save_env(values: dict[str, str]) -> None:
-    """Escribe/actualiza claves en .env (en la carpeta de código) sin tocar el resto de líneas."""
+    """Write/update keys in .env (in the code folder) without touching the other lines."""
     try:
         lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -143,18 +143,18 @@ class Mail:
         self.accounts: list[Account] = []
         self.load()
         self._lock = threading.Lock()
-        self._headers: dict[str, dict] = {}   # id → cabecera ya leída (no se vuelve a pedir cada minuto)
-        self._opened: dict[str, tuple] = {}   # id → (cuenta, mensaje): el último par abierto en el panel (fotos, adjuntos)
+        self._headers: dict[str, dict] = {}   # id -> header already read (not requested again every minute)
+        self._opened: dict[str, tuple] = {}   # id -> (account, message): the last pairs opened in the panel (photos, attachments)
         self.unread: list[dict] = []
         self.error = ""
         self.checked_at = 0.0
         try:
             self._seen = set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
         except (OSError, ValueError):
-            self._seen = None   # primera vez: lo que ya hay no se anuncia
+            self._seen = None   # first run: what is already there is not announced
 
     def load(self):
-        """(Re)lee las cuentas del entorno: así una cuenta conectada desde el panel vale sin reiniciar."""
+        """(Re)read the accounts from the environment, so an account connected from the panel works without a restart."""
         self.accounts = []
         for key, label, suffix in SLOTS:
             user = os.environ.get(f"GMAIL_USER{suffix}", "").strip()
@@ -163,19 +163,19 @@ class Mail:
                 self.accounts.append(Account(key, label, user, pw))
 
     def connect(self, slot: str, user: str, password: str) -> str | None:
-        """Desde el panel: prueba la cuenta y, si entra, la guarda en .env. Devuelve el error o None."""
+        """From the panel: test the account and, if it logs in, save it to .env. Returns the error or None."""
         suffix = next((s for k, _, s in SLOTS if k == slot), None)
         user, password = user.strip(), "".join(password.split())
         if suffix is None or "@" not in user or not password:
-            return "Falta el correo o la contraseña."
+            return "The email or password is missing."
         err = test_login(user, password)
         if err:
             if len(password) != 16 or not password.isalpha():
-                err += " Las contraseñas de aplicación son 16 letras (abcd efgh ijkl mnop)."
+                err += " App passwords are 16 letters (abcd efgh ijkl mnop)."
             return err
         save_env({f"GMAIL_USER{suffix}": user, f"GMAIL_APP_PASSWORD{suffix}": password})
         self.load()
-        log.info("Cuenta de correo conectada desde el panel: %s", user)
+        log.info("Mail account connected from the panel: %s", user)
         return None
 
     @property
@@ -184,9 +184,9 @@ class Mail:
 
     def _account(self, key: str | None) -> Account:
         if not self.accounts:
-            raise RuntimeError("El correo no está configurado (faltan las contraseñas de aplicación en .env)")
+            raise RuntimeError("Mail is not configured (app passwords are missing from .env)")
         k = (key or "").lower()
-        for a in self.accounts:   # primero la letra exacta («s» también está dentro de «correo»)
+        for a in self.accounts:   # exact letter first ("s" is also inside "correo")
             if k == a.key:
                 return a
         for a in self.accounts:
@@ -194,9 +194,9 @@ class Mail:
                 return a
         return self.accounts[0]
 
-    # ---------- leer ----------
+    # ---------- read ----------
     def check(self) -> list[dict]:
-        """Actualiza la lista de no leídos (de todas las cuentas) y devuelve los nuevos desde la última vez."""
+        """Refresh the unread list (all accounts) and return what is new since the last call."""
         if not self.configured:
             return []
         items, errors = [], []
@@ -206,7 +206,7 @@ class Mail:
                 try:
                     _, data = box.uid("search", None, "UNSEEN")
                     uids = [u.decode() for u in (data[0] or b"").split()[-15:]]
-                    # las cabeceras ya vistas se reutilizan; las nuevas se piden todas en una sola orden
+                    # headers already seen are reused; the new ones are fetched in a single command
                     missing = [u for u in uids if f"{acc.key}{u}" not in self._headers]
                     if missing:
                         _, msg = box.uid("fetch", ",".join(missing), "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
@@ -223,7 +223,7 @@ class Mail:
                             self._headers[f"{acc.key}{uid}"] = {
                                 "id": f"{acc.key}{uid}", "uid": uid, "account": acc.label, "to": acc.user,
                                 "from": name or addr, "addr": addr,
-                                "subject": _decode(h.get("Subject")) or "(sin asunto)", "time": when}
+                                "subject": _decode(h.get("Subject")) or "(no subject)", "time": when}
                     items += [self._headers[f"{acc.key}{u}"] for u in uids if f"{acc.key}{u}" in self._headers]
                 finally:
                     try:
@@ -231,24 +231,24 @@ class Mail:
                     except Exception:
                         pass
             except (imaplib.IMAP4.error, OSError) as e:
-                # IMAP4.abort (conexión cortada, p. ej. al volver de suspensión) también es IMAP4.error: no es la contraseña
+                # IMAP4.abort (dropped connection, e.g. after resume from sleep) is also IMAP4.error: not the password
                 bad_login = isinstance(e, imaplib.IMAP4.error) and not isinstance(e, imaplib.IMAP4.abort)
-                errors.append(f"{acc.user}: " + ("revisa la contraseña de aplicación" if bad_login else "sin conexión"))
-                log.warning("Correo %s: %s", acc.user, e)
-                # mientras tanto se quedan los que ya se sabían de esa cuenta (no desaparecen del panel)
+                errors.append(f"{acc.user}: " + ("check the app password" if bad_login else "no connection"))
+                log.warning("Mail %s: %s", acc.user, e)
+                # meanwhile keep what was already known for that account (it does not vanish from the panel)
                 with self._lock:
                     items += [i for i in self.unread if i["id"].startswith(acc.key)]
         self.error = " · ".join(errors)
         items.sort(key=lambda i: i["time"], reverse=True)
         live = {i["id"] for i in items}
-        self._headers = {k: v for k, v in self._headers.items() if k in live}   # leídos o borrados: fuera
+        self._headers = {k: v for k, v in self._headers.items() if k in live}   # read or deleted: drop
         with self._lock:
             self.unread = items
             self.checked_at = time.time()
             first = self._seen is None
             seen = self._seen or set()
             new = [] if first else [i for i in items if i["id"] not in seen]
-            # solo hace falta recordar los que siguen sin leer (los leídos ya no vuelven a la lista)
+            # only the still-unread ones need remembering (read ones never come back to the list)
             self._seen = live if not errors else seen | live
             try:
                 SEEN_FILE.write_text(json.dumps(sorted(self._seen)), encoding="utf-8")
@@ -257,9 +257,9 @@ class Mail:
         return new
 
     def recent(self, hours: float = 12, limit: int = 25) -> list[dict]:
-        """Correos recibidos en las últimas `hours` horas (leídos o no), de todas las cuentas; lo más nuevo primero."""
+        """Mail received in the last `hours` hours (read or not), all accounts, newest first."""
         since = time.time() - hours * 3600
-        day = time.strftime("%d-%b-%Y", time.localtime(since))   # IMAP solo filtra por día; la hora se mira después
+        day = time.strftime("%d-%b-%Y", time.localtime(since))   # IMAP only filters by day; the time is checked afterwards
         out = []
         for acc in self.accounts:
             try:
@@ -283,7 +283,7 @@ class Mail:
                             continue
                         name, addr = email.utils.parseaddr(_decode(h.get("From")))
                         out.append({"id": f"{acc.key}{m.group(1).decode()}", "account": acc.label, "from": name or addr,
-                                    "subject": _decode(h.get("Subject")) or "(sin asunto)", "time": when,
+                                    "subject": _decode(h.get("Subject")) or "(no subject)", "time": when,
                                     "read": b"\\Seen" in part[0]})
                 finally:
                     try:
@@ -291,7 +291,7 @@ class Mail:
                     except Exception:
                         pass
             except (imaplib.IMAP4.error, OSError) as e:
-                log.warning("Correo %s: %s", acc.user, e)
+                log.warning("Mail %s: %s", acc.user, e)
         return sorted(out, key=lambda i: i["time"], reverse=True)[:limit]
 
     def _fetch(self, mail_id: str) -> tuple[Account, email.message.Message]:
@@ -307,7 +307,7 @@ class Mail:
             except Exception:
                 pass
         if not raw:
-            raise RuntimeError("No encuentro ese correo")
+            raise RuntimeError("Cannot find that email")
         return acc, email.message_from_bytes(raw)
 
     def _cached(self, mail_id: str) -> tuple[Account, email.message.Message]:
@@ -323,7 +323,7 @@ class Mail:
         return hit
 
     def open(self, mail_id: str) -> dict:
-        """Para el lector del panel: cabecera y adjuntos (el cuerpo va aparte, en html())."""
+        """For the panel reader: header and attachments (the body is separate, in html())."""
         acc, m = self._cached(mail_id)
         files = []
         for n, p in enumerate(_parts(m)):
@@ -335,7 +335,7 @@ class Mail:
                 "subject": _decode(m.get("Subject")), "date": m.get("Date", ""), "files": files}
 
     def html(self, mail_id: str) -> str:
-        """El cuerpo como página: el HTML del correo (fotos incrustadas incluidas) o el texto, sin scripts."""
+        """The body as a page: the mail HTML (embedded photos included) or the text, without scripts."""
         _, m = self._cached(mail_id)
         parts = _parts(m)
         html = plain = None
@@ -354,7 +354,7 @@ class Mail:
                     plain = body
         if html is None:
             import html as _h
-            text = _h.escape(plain or "(sin texto)")
+            text = _h.escape(plain or "(no text)")
             text = re.sub(r"(https?://[^\s<]+)", r'<a href="\1">\1</a>', text)
             html = f'<pre style="white-space:pre-wrap;font:15px/1.5 system-ui,sans-serif;margin:0">{text}</pre>'
         url = "/api/mail/part?id=" + mail_id + "&n="
@@ -366,18 +366,18 @@ class Mail:
         return "<!doctype html>" + head + html
 
     def part(self, mail_id: str, n: int) -> tuple[bytes, str, str]:
-        """Un adjunto o foto del correo: (datos, tipo, nombre)."""
+        """An attachment or photo of the mail: (data, type, name)."""
         _, m = self._cached(mail_id)
         p = _parts(m)[n]
-        return _payload(p), p.get_content_type(), _filename(p) or f"adjunto-{n}"
+        return _payload(p), p.get_content_type(), _filename(p) or f"attachment-{n}"
 
     def read(self, mail_id: str, limit: int = 4000) -> dict:
-        """Remitente, asunto y texto de un correo (sin marcarlo como leído)."""
+        """Sender, subject and text of a mail (without marking it as read)."""
         acc, m = self._fetch(mail_id)
         return {"id": mail_id, "account": acc.label, "from": _decode(m.get("From")), "subject": _decode(m.get("Subject")),
                 "date": m.get("Date", ""), "text": _text_of(m)[:limit]}
 
-    # ---------- enviar ----------
+    # ---------- send ----------
     def send(self, to: str, subject: str, body: str, account: str | None = None) -> str:
         acc = self._account(account)
         msg = email.message.EmailMessage()
@@ -386,11 +386,11 @@ class Mail:
         msg["Message-ID"] = email.utils.make_msgid(domain=acc.user.split("@")[-1])
         msg.set_content(body)
         acc.send(msg)
-        log.info("Correo enviado desde %s a %s: %s", acc.user, to, subject)
-        return f"Enviado a {to} desde {acc.user}."
+        log.info("Mail sent from %s to %s: %s", acc.user, to, subject)
+        return f"Sent to {to} from {acc.user}."
 
     def reply(self, mail_id: str, body: str) -> str:
-        """Responde a un correo desde la cuenta que lo recibió, en el mismo hilo."""
+        """Reply to a mail from the account that received it, in the same thread."""
         acc, orig = self._fetch(mail_id)
         to = orig.get("Reply-To") or orig.get("From")
         subject = _decode(orig.get("Subject"))
@@ -404,8 +404,8 @@ class Mail:
             msg["References"] = f"{orig.get('References', '')} {orig['Message-ID']}".strip()
         msg.set_content(body)
         acc.send(msg)
-        log.info("Respuesta enviada desde %s a %s: %s", acc.user, to, msg["Subject"])
-        return f"Respondido a {email.utils.parseaddr(_decode(to))[1] or to}."
+        log.info("Reply sent from %s to %s: %s", acc.user, to, msg["Subject"])
+        return f"Replied to {email.utils.parseaddr(_decode(to))[1] or to}."
 
     def summary(self) -> dict:
         return {"configured": self.configured, "accounts": [{"label": a.label, "user": a.user} for a in self.accounts],

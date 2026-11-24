@@ -1,7 +1,7 @@
-"""Una sola webcam para varios lectores: la visión (gestos) y el control de ventanas leen a la vez.
+"""One webcam shared by several readers: vision (gestures) and window control read at the same time.
 
-Windows no deja abrir la misma webcam dos veces; SharedCamera la abre una vez, la lee en un hilo y cada
-lector recibe un objeto con read()/release() como el de cv2.VideoCapture.
+Windows does not allow opening the same webcam twice; SharedCamera opens it once, reads it in a thread and each
+reader gets an object with read()/release() like cv2.VideoCapture.
 """
 
 import threading
@@ -14,15 +14,15 @@ class _Reader:
         self._cam = cam
         self._seq = 0
 
-    def isOpened(self) -> bool:   # noqa: N802 (misma API que cv2.VideoCapture)
+    def isOpened(self) -> bool:   # noqa: N802 (same API as cv2.VideoCapture)
         return self._cam.opened
 
     def read(self, timeout: float = 1.0):
-        """La siguiente imagen que no haya visto este lector: (True, imagen) o (False, None) si no llega."""
+        """The next frame this reader has not seen yet: (True, frame), or (False, None) if none arrives."""
         frame, self._seq = self._cam.wait(self._seq, timeout)
         return (frame is not None), frame
 
-    def set(self, *_):   # la resolución la decide quien abre la cámara
+    def set(self, *_):   # whoever opens the camera decides the resolution
         return False
 
     def release(self) -> None:
@@ -58,7 +58,7 @@ class SharedCamera:
         return cap
 
     def reader(self) -> _Reader | None:
-        """Un lector nuevo; abre la cámara si es el primero. None si no se puede abrir."""
+        """A new reader; opens the camera if it is the first. None if it cannot be opened."""
         with self._lock:
             if self._cap is None:
                 self._cap = self._opener(self.index)
@@ -71,9 +71,9 @@ class SharedCamera:
             return r
 
     def leave(self, reader) -> None:
-        """Quita un lector; con el último se suelta la cámara (y otra app la puede usar)."""
-        # shortcut: si la visión reabre una cámara colgada mientras el control de ventanas sigue leyendo, el
-        # dispositivo no se reabre de verdad; cerrar los dos lectores (desactivar y activar gestos) lo arregla.
+        """Remove a reader; the camera is released with the last one (so another app can use it)."""
+        # shortcut: if vision reopens a hung camera while window control keeps reading, the
+        # device is not really reopened; closing both readers (disable and re-enable gestures) fixes it.
         with self._lock:
             self._readers.discard(reader)
             if self._readers or self._cap is None:

@@ -1,14 +1,15 @@
-"""Saldo y movimientos de Revolut vía Enable Banking (PSD2, SOLO LECTURA).
+"""Revolut balance and transactions via Enable Banking (PSD2, READ ONLY).
 
-Solo se usan endpoints de consulta: GET /aspsps, POST /auth, POST /sessions, GET /sessions/{id},
-GET /accounts/{uid}/balances y GET /accounts/{uid}/transactions. Nada de pagos.
+Only query endpoints are used: GET /aspsps, POST /auth, POST /sessions, GET /sessions/{id},
+GET /accounts/{uid}/balances and GET /accounts/{uid}/transactions. No payments.
 
-Secretos (nunca en Drive): EB_APP_ID y EB_KEY_PATH (el <app id>.pem) en el .env; EB_REDIRECT_URL opcional;
-la sesión en secrets/bank_session.json.
-Los bancos solo permiten ~4 consultas al día sin el usuario delante, así que se cachea 6 h y, aunque se
-pida refrescar, nunca se consulta más de una vez cada 10 min.
+Secrets (never in Drive): EB_APP_ID and EB_KEY_PATH (the <app id>.pem) in .env; EB_REDIRECT_URL optional;
+the session in secrets/bank_session.json.
+Banks only allow ~4 queries a day without the user present, so results are cached for 6 h and, even if a
+refresh is requested, the bank is never queried more than once every 10 min.
 
-Uso a mano (desde C:la carpeta del programa\\src):  python -m hub.bank auth | resumen [--forzar] | estado
+Manual use (from the program folder's src directory):  python -m hub.bank auth | summary [--force] | status
+(Spanish aliases still work: resumen [--forzar] | estado)
 """
 
 import json
@@ -33,16 +34,16 @@ log = logging.getLogger("bank")
 API = "https://api.enablebanking.com"
 SECRETS = ROOT / "secrets"
 SESSION_FILE = SECRETS / "bank_session.json"
-CACHE_FILE = SECRETS / "bank_cache.json"     # también son datos bancarios: fuera de Drive
+CACHE_FILE = SECRETS / "bank_cache.json"     # bank data too: kept out of Drive
 DEFAULT_KEY = SECRETS / "enablebanking.pem"
-DEFAULT_REDIRECT = "https://localhost:8765/bank/callback"   # la registrada en la app de Enable Banking
+DEFAULT_REDIRECT = "https://localhost:8765/bank/callback"   # the one registered in the Enable Banking app
 
 CACHE_SECONDS = 6 * 3600
 MIN_REFRESH_SECONDS = 10 * 60
-# Orden de preferencia de tipos de saldo (ISO 20022): disponible → contable → el que haya
+# Preferred balance types (ISO 20022): available -> booked -> whatever exists
 BALANCE_ORDER = ["CLAV", "ITAV", "XPCD", "CLBD", "ITBD", "OPAV", "OPBD"]
 
-# Lista blanca de llamadas permitidas: cualquier otra cosa (p. ej. /payments) se rechaza
+# Allow-list of calls: anything else (e.g. /payments) is rejected
 _ALLOWED = [
     ("GET", re.compile(r"^/aspsps$")),
     ("POST", re.compile(r"^/auth$")),
@@ -57,29 +58,29 @@ _token: dict = {}
 
 
 class BankError(Exception):
-    """Error con mensaje en español, listo para decírselo a Charlie."""
+    """Error with a message ready to show to the user."""
 
 
-# ---------- credenciales y llamadas ----------
+# ---------- credentials and calls ----------
 
 def _app_id() -> str:
     app_id = os.environ.get("EB_APP_ID", "").strip()
     if not app_id:
-        raise BankError("Falta el EB_APP_ID en el .env (el ID de la aplicación de Enable Banking).")
+        raise BankError("EB_APP_ID is missing from .env (the Enable Banking application ID).")
     return app_id
 
 
 def _key() -> bytes:
     path = Path(os.environ.get("EB_KEY_PATH", "").strip() or DEFAULT_KEY)
-    if not path.exists():   # p. ej. "\a" en un .env entre comillas dobles se come la barra: probar <app id>.pem
+    if not path.exists():   # e.g. "\a" in a double-quoted .env eats the backslash: try <app id>.pem
         path = SECRETS / f"{_app_id()}.pem"
     if not path.exists():
-        raise BankError(f"No encuentro la clave privada de Enable Banking en {path}.")
+        raise BankError(f"Cannot find the Enable Banking private key at {path}.")
     return path.read_bytes()
 
 
 def _jwt() -> str:
-    """JWT RS256 firmado con la clave de la app; se reutiliza hasta 5 min antes de caducar (1 h)."""
+    """RS256 JWT signed with the app key; reused until 5 min before it expires (1 h)."""
     now = int(time.time())
     if _token.get("exp", 0) - now > 300:
         return _token["jwt"]
@@ -89,7 +90,7 @@ def _jwt() -> str:
     except BankError:
         raise
     except Exception as e:
-        raise BankError(f"La clave privada no vale para firmar: {e}") from e
+        raise BankError(f"The private key cannot be used to sign: {e}") from e
     _token.update(jwt=token, exp=body["exp"])
     return token
 
@@ -104,28 +105,28 @@ def _error_text(r: httpx.Response) -> str:
 
 def _call(method: str, path: str, **kw) -> dict:
     if not any(m == method and rx.match(path) for m, rx in _ALLOWED):
-        raise BankError(f"Llamada no permitida (solo lectura): {method} {path}")
+        raise BankError(f"Call not allowed (read-only): {method} {path}")
     try:
         r = httpx.request(method, API + path, timeout=30,
                           headers={"Authorization": f"Bearer {_jwt()}"}, **kw)
     except httpx.HTTPError as e:
-        raise BankError(f"No pude conectar con Enable Banking: {e}") from e
+        raise BankError(f"Could not connect to Enable Banking: {e}") from e
     if r.status_code < 300:
         return r.json()
     detail = _error_text(r)
     log.warning("%s %s → %s %s", method, path, r.status_code, detail)
     if "EXPIRED_SESSION" in detail or "CLOSED_SESSION" in detail or "REVOKED" in detail:
-        raise BankError("El permiso con el banco ha caducado o se ha revocado. Hay que volver a autorizar.")
+        raise BankError("The permission with the bank has expired or been revoked. It must be authorized again.")
     if r.status_code == 429:
-        raise BankError("El banco no deja consultar más ahora mismo (límite diario). Prueba dentro de unas horas.")
+        raise BankError("The bank will not allow more queries right now (daily limit). Try again in a few hours.")
     if r.status_code == 401:
-        raise BankError("Enable Banking no acepta las credenciales (revisa EB_APP_ID y la clave .pem).")
+        raise BankError("Enable Banking does not accept the credentials (check EB_APP_ID and the .pem key).")
     if r.status_code == 403:
-        raise BankError("Enable Banking deniega el acceso (¿la app está activada y la cuenta vinculada?).")
-    raise BankError(f"Error de Enable Banking ({r.status_code}): {detail}")
+        raise BankError("Enable Banking denies access (is the app activated and the account linked?).")
+    raise BankError(f"Enable Banking error ({r.status_code}): {detail}")
 
 
-# ---------- ficheros de estado ----------
+# ---------- state files ----------
 
 def _load(path: Path) -> dict:
     try:
@@ -133,7 +134,7 @@ def _load(path: Path) -> dict:
     except FileNotFoundError:
         return {}
     except Exception as e:
-        log.warning("No pude leer %s: %s", path.name, e)
+        log.warning("Could not read %s: %s", path.name, e)
         return {}
 
 
@@ -144,20 +145,20 @@ def _save(path: Path, data: dict) -> None:
     tmp.replace(path)
 
 
-# ---------- autorización ----------
+# ---------- authorization ----------
 
 def _max_consent_seconds(aspsp_name: str, country: str) -> int:
-    """Validez máxima del permiso para ese banco (180 días en Revolut)."""
+    """Maximum consent validity for that bank (180 days for Revolut)."""
     for a in _call("GET", "/aspsps", params={"country": country}).get("aspsps", []):
         if a.get("name", "").lower() == aspsp_name.lower():
             return int(a.get("maximum_consent_validity") or 90 * 86400)
-    raise BankError(f"Enable Banking no tiene «{aspsp_name}» en el país {country}.")
+    raise BankError(f"Enable Banking does not have '{aspsp_name}' in country {country}.")
 
 
 def start_auth(aspsp_name: str = "Revolut", country: str = "ES", redirect_url: str | None = None) -> str:
-    """Pide a Enable Banking el enlace de consentimiento y lo devuelve. Guarda el 'state' para comprobarlo luego."""
+    """Ask Enable Banking for the consent link and return it. Saves the 'state' to check it later."""
     redirect_url = redirect_url or os.environ.get("EB_REDIRECT_URL", "").strip() or DEFAULT_REDIRECT
-    seconds = _max_consent_seconds(aspsp_name, country) - 3600   # margen por relojes desajustados
+    seconds = _max_consent_seconds(aspsp_name, country) - 3600   # margin for clock skew
     valid_until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     state = str(uuid.uuid4())
     d = _call("POST", "/auth", json={
@@ -170,7 +171,7 @@ def start_auth(aspsp_name: str = "Revolut", country: str = "ES", redirect_url: s
     data = _load(SESSION_FILE)
     data["pending"] = {"state": state, "aspsp": aspsp_name, "country": country, "at": time.time()}
     _save(SESSION_FILE, data)
-    log.info("Consentimiento pedido para %s (%s)", aspsp_name, country)
+    log.info("Consent requested for %s (%s)", aspsp_name, country)
     return d["url"]
 
 
@@ -181,23 +182,23 @@ def _mask(account: dict) -> str:
 
 
 def finish_auth(code: str) -> dict:
-    """Recibe el 'code' (o la URL entera a la que te mandó el banco), crea la sesión y la guarda."""
+    """Take the 'code' (or the whole URL the bank sent you to), create the session and save it."""
     code = code.strip()
     state = None
     if code.startswith("http"):
         q = parse_qs(urlparse(code).query)
         if "error" in q:
-            raise BankError(f"El banco no dio permiso: {q.get('error_description', q['error'])[0]}")
+            raise BankError(f"The bank did not grant permission: {q.get('error_description', q['error'])[0]}")
         state = (q.get("state") or [None])[0]
         code = (q.get("code") or [""])[0]
     if not code:
-        raise BankError("No veo el 'code' en lo que has pegado.")
+        raise BankError("I cannot see the 'code' in what you pasted.")
     data = _load(SESSION_FILE)
     pending = data.get("pending") or {}
     if state and pending.get("state") and state != pending["state"]:
-        raise BankError("El 'state' no coincide con la petición; vuelve a empezar la autorización.")
+        raise BankError("The 'state' does not match the request; start the authorization again.")
     s = _call("POST", "/sessions", json={"code": code})
-    accounts = [{"uid": a.get("uid"), "name": a.get("name") or a.get("product") or "Cuenta",
+    accounts = [{"uid": a.get("uid"), "name": a.get("name") or a.get("product") or "Account",
                  "currency": a.get("currency"), "masked": _mask(a)}
                 for a in s.get("accounts", []) if a.get("uid")]
     session = {"session_id": s["session_id"], "valid_until": (s.get("access") or {}).get("valid_until"),
@@ -205,19 +206,19 @@ def finish_auth(code: str) -> dict:
                "accounts": accounts, "created": time.time()}
     _save(SESSION_FILE, {"session": session})
     CACHE_FILE.unlink(missing_ok=True)
-    log.info("Sesión bancaria creada con %d cuentas", len(accounts))
+    log.info("Bank session created with %d accounts", len(accounts))
     return session
 
 
 def _session() -> dict:
     s = _load(SESSION_FILE).get("session")
     if not s:
-        raise BankError("Aún no hay ningún banco conectado. Ejecuta: python -m hub.bank auth")
+        raise BankError("No bank is connected yet. Run: python -m hub.bank auth")
     return s
 
 
 def consent_expires_in_days() -> int | None:
-    """Días que le quedan al permiso del banco (None si no hay sesión). Negativo = caducado."""
+    """Days left on the bank consent (None if there is no session). Negative = expired."""
     s = _load(SESSION_FILE).get("session") or {}
     if not s.get("valid_until"):
         return None
@@ -226,11 +227,11 @@ def consent_expires_in_days() -> int | None:
 
 
 def session_status() -> str:
-    """Estado de la sesión según Enable Banking (AUTHORIZED, EXPIRED…). Gasta una llamada: usar poco."""
+    """Session status according to Enable Banking (AUTHORIZED, EXPIRED...). Costs one call: use sparingly."""
     return _call("GET", f"/sessions/{_session()['session_id']}").get("status", "?")
 
 
-# ---------- saldo y movimientos ----------
+# ---------- balance and transactions ----------
 
 def _balance(uid: str) -> dict:
     balances = _call("GET", f"/accounts/{uid}/balances").get("balances", [])
@@ -255,11 +256,11 @@ def _tx_row(t: dict) -> dict:
 
 
 def _transactions(uid: str) -> list[dict]:
-    """Movimientos desde el día 1 del mes pasado (para comparar meses)."""
+    """Transactions since the 1st of last month (to compare months)."""
     first = date.today().replace(day=1)
     params = {"date_from": (first - timedelta(days=1)).replace(day=1).isoformat()}
     rows: list[dict] = []
-    for _ in range(8):                       # pocas páginas: cada una cuenta como llamada
+    for _ in range(8):                       # few pages: each one counts as a call
         d = _call("GET", f"/accounts/{uid}/transactions", params=params)
         rows += [_tx_row(t) for t in d.get("transactions", [])]
         if not d.get("continuation_key"):
@@ -269,8 +270,9 @@ def _transactions(uid: str) -> list[dict]:
     return rows
 
 
-# ---------- gastos ----------
-# Categorías por palabras del concepto (lo primero que case). Lo que no case va a «otros».
+# ---------- spending ----------
+# Categories by keywords in the description (first match wins). Anything unmatched goes to "otros".
+# The category names are Spanish data values shown in the panel; keep them in sync with the UI.
 CATEGORIES = [
     ("súper", r"mercadona|carrefour|carref|lidl|\bdia\b|alcampo|aldi|ahorramas|eroski|supermercado|hipercor|supeco|"
               r"el jamon|consum\b|covirán|coviran"),
@@ -287,7 +289,7 @@ CATEGORIES = [
     ("efectivo", r"atm|cash withdrawal|cajero"),
     ("ocio", r"cine|steam|playstation|ticketmaster|entradas|gimnasio|basic-fit"),
 ]
-# No son gastos: dinero que se mueve a tus propios huchas, inversiones o cambios de divisa
+# Not spending: money moved to your own vaults, investments or currency exchanges
 NOT_SPENDING = re.compile(r"to investment|exchanged to|to savings|to pocket|vault|hucha|to eur|to usd", re.I)
 _CAT_RE = [(name, re.compile(rx, re.I)) for name, rx in CATEGORIES]
 
@@ -300,7 +302,7 @@ def category(description: str) -> str:
 
 
 def spending(rows: list[dict], today: date | None = None) -> dict:
-    """Gasto del mes (solo cargos), media diaria, proyección a fin de mes, mes anterior y categorías."""
+    """Month spending (charges only), daily average, end-of-month projection, previous month and categories."""
     today = today or date.today()
     month = today.strftime("%Y-%m")
     prev = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
@@ -325,13 +327,13 @@ def _fetch(n: int) -> dict:
     for a in s["accounts"]:
         rows = _transactions(a["uid"])
         accounts.append({"name": a["name"], "masked": a["masked"], "currency": a["currency"],
-                         "balance": _balance(a["uid"]), "transactions": rows})   # este mes y el anterior
+                         "balance": _balance(a["uid"]), "transactions": rows})   # this month and the previous one
     return {"ok": True, "accounts": accounts, "fetched_at": time.time(),
             "consent_days": consent_expires_in_days()}
 
 
 def summary(force: bool = False, n: int = 10) -> dict:
-    """Saldo por cuenta y últimos n movimientos. Cache 6 h; con force, refresca si han pasado ≥10 min."""
+    """Balance per account and latest n transactions. Cached 6 h; with force, refreshes if at least 10 min have passed."""
     with _lock:
         cache = _load(CACHE_FILE)
         age = time.time() - cache.get("fetched_at", 0)
@@ -340,7 +342,7 @@ def summary(force: bool = False, n: int = 10) -> dict:
         try:
             data = _fetch(n)
         except BankError as e:
-            log.warning("Banco: %s", e)
+            log.warning("Bank: %s", e)
             if cache:
                 return _with_spending({**cache, "stale": True, "error": str(e)})
             return {"ok": False, "error": str(e)}
@@ -349,28 +351,28 @@ def summary(force: bool = False, n: int = 10) -> dict:
 
 
 def _with_spending(data: dict) -> dict:
-    """Los gastos se calculan al leer (las categorías pueden cambiar sin gastar consultas al banco)."""
+    """Spending is computed on read (categories can change without spending bank queries)."""
     for a in data.get("accounts", []):
         a["spending"] = spending(a.get("transactions") or [])
     return data
 
 
-# ---------- línea de comandos ----------
+# ---------- command line ----------
 
 def _print_summary(d: dict) -> None:
     if not d.get("ok"):
         print("Error:", d.get("error"))
         return
     when = datetime.fromtimestamp(d["fetched_at"]).strftime("%d/%m %H:%M")
-    print(f"Datos de las {when}" + (" (antiguos: " + d["error"] + ")" if d.get("stale") else ""))
+    print(f"Data from {when}" + (" (stale: " + d["error"] + ")" if d.get("stale") else ""))
     for a in d["accounts"]:
         b = a["balance"]
-        saldo = f"{b['amount']:.2f} {b['currency']}" if b else "sin saldo"
+        saldo = f"{b['amount']:.2f} {b['currency']}" if b else "no balance"
         print(f"\n{a['name']} {a['masked']} [{a['currency']}]: {saldo}")
         for t in a["transactions"]:
             print(f"  {t['date']}  {t['amount']:>10.2f} {t['currency']}  {t['description']}")
     if d.get("consent_days") is not None:
-        print(f"\nEl permiso caduca en {d['consent_days']} días.")
+        print(f"\nThe permission expires in {d['consent_days']} days.")
 
 
 def _cli(args: list[str]) -> int:
@@ -378,16 +380,16 @@ def _cli(args: list[str]) -> int:
     try:
         if cmd == "auth":
             country = args[1] if len(args) > 1 else "ES"
-            print("Abre este enlace, entra en Revolut y da permiso:\n\n" + start_auth("Revolut", country) + "\n")
-            pasted = input("Pega aquí la URL completa a la que te ha llevado (aunque la página no cargue): ")
+            print("Open this link, sign in to Revolut and grant permission:\n\n" + start_auth("Revolut", country) + "\n")
+            pasted = input("Paste the full URL you were taken to (even if the page does not load): ")
             s = finish_auth(pasted)
-            print(f"Listo: {len(s['accounts'])} cuentas conectadas. Caduca en {consent_expires_in_days()} días.")
-        elif cmd == "resumen":
-            _print_summary(summary(force="--forzar" in args))
-        elif cmd == "estado":
-            print("Estado de la sesión:", session_status(), "· caduca en", consent_expires_in_days(), "días")
+            print(f"Done: {len(s['accounts'])} accounts connected. Expires in {consent_expires_in_days()} days.")
+        elif cmd in ("resumen", "summary"):
+            _print_summary(summary(force="--forzar" in args or "--force" in args))
+        elif cmd in ("estado", "status"):
+            print("Session status:", session_status(), "· expires in", consent_expires_in_days(), "days")
         else:
-            print("Uso: python -m hub.bank auth [PAÍS] | resumen [--forzar] | estado")
+            print("Usage: python -m hub.bank auth [COUNTRY] | summary [--force] | status  (Spanish aliases: resumen, --forzar, estado)")
             return 2
     except BankError as e:
         print("Error:", e)

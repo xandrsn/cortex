@@ -87,7 +87,7 @@ window.CORTEX_DEFAULTS = {
  "voice_en": "en-US-AvaMultilingualNeural",
  "piper_es": "es_ES-davefx-medium",
  "piper_en": "en_US-lessac-medium",
- "notice_language": "es",
+ "notice_language": "en",
  "theme": "light",
  "spotify_device": "",
  "ui_port": 8765,

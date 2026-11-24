@@ -1,9 +1,9 @@
-"""Proceso aparte que vigila si Windows tiene el micro silenciado.
+"""Separate process that watches whether Windows has the microphone muted.
 
-Se ejecuta como `python -m hub.micmute`: escribe "1"/"0" (silenciado o no) cada 3 s y reactiva el
-micro si recibe "unmute" por stdin. También escribe "out:<altavoces conectados>" para que Cortex cambie
-de salida cuando se conecta o desconecta un altavoz Bluetooth. Va en otro proceso porque los objetos COM de pycaw, liberados
-desde otro hilo por el recolector de basura, tumban el proceso que los usa.
+Run as `python -m hub.micmute`: writes "1"/"0" (muted or not) every 3 s and unmutes the mic if it
+receives "unmute" on stdin. It also writes "out:<connected speakers>" so Cortex can switch output when a
+Bluetooth speaker connects or disconnects. It runs in its own process because pycaw COM objects released
+by the garbage collector from another thread crash the process that uses them.
 """
 
 import sys
@@ -20,8 +20,8 @@ from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 def speakers() -> str:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # solo salidas activas: enumerar todos los dispositivos (con todas sus propiedades) costaba ~0,8 s
-        # de CPU cada 3 s
+        # active outputs only: enumerating every device (with all its properties) cost ~0.8 s
+        # of CPU every 3 s
         names = [d.FriendlyName for d in AudioUtilities.GetAllDevices(EDataFlow.eRender.value,
                                                                       DEVICE_STATE.ACTIVE.value)]
     return "|".join(sorted(n or "" for n in names))

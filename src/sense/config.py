@@ -1,4 +1,4 @@
-"""Ajustes de Cortex Sense: sense.yaml junto al código (o junto al .exe)."""
+"""Cortex Sense settings: sense.yaml next to the code (or next to the .exe)."""
 
 import logging
 import sys
@@ -14,29 +14,29 @@ MODELS_DIR = ROOT / "models"
 LOGS_DIR = ROOT / "logs"
 CONFIG_FILE = ROOT / "sense.yaml"
 
-# Acciones de Hub: si Hub está conectado las ejecuta él; si no, Sense usa la tecla multimedia equivalente.
+# Hub actions: if Hub is connected it runs them; otherwise Sense uses the equivalent media key.
 HUB_ACTIONS = ["next", "previous", "toggle", "volume_up", "volume_down", "listen", "stop", "quiet",
                "ambient", "wake_toggle", "new_chat", "theme"]
 
 DEFAULTS = {
     "ui_port": 8766,
-    "setup_done": False,             # el asistente de instalación (cámara + calibración) ya se hizo
+    "setup_done": False,             # the setup wizard (camera + calibration) has been completed
     "camera_index": 0,
     "gestures_enabled": True,
-    "window_gestures": True,         # mover ventanas con pellizco (overlay de pygame; al reiniciar)
-    "gestures_require_look": True,   # los gestos solo cuentan mirando a la pantalla
-    "look_max_angle": 22,            # grados de giro/cabeceo máximos para «mirando»
-    "look_pitch_offset": 0,          # grados: centro del cabeceo (+ = abajo); lo ajusta la calibración
+    "window_gestures": True,         # move windows with a pinch (pygame overlay; on restart)
+    "gestures_require_look": True,   # gestures only count while looking at the screen
+    "look_max_angle": 22,            # max yaw/pitch degrees to count as "looking"
+    "look_pitch_offset": 0,          # degrees: pitch centre (+ = down); set by calibration
     "gesture_min_score": 0.6,
     "gesture_hold_seconds": 0.35,
     "gesture_cooldown": 1.0,
-    "swipe_min_distance": 0.22,      # fracción del encuadre; la calibración la escala al tamaño de tu mano
-    "custom_gesture_threshold": 0.22,  # distancia media máxima (en palmos) para aceptar un gesto propio
-    "pinch_grab": 40,                # px (espacio de la ventana) para agarrar una ventana; calibrado
+    "swipe_min_distance": 0.22,      # fraction of the frame; calibration scales it to your hand size
+    "custom_gesture_threshold": 0.22,  # max mean distance (in palm widths) to accept a custom gesture
+    "pinch_grab": 40,                # px (window space) to grab a window; calibrated
     "pinch_release": 60,
-    "calibration": {},               # última medida: luz, fps, tamaño de mano, mano dominante
-    # Gesto → acción. Acciones: una de HUB_ACTIONS, "media:<tecla>", "keys:ctrl+shift+m", "run:<programa>",
-    # "window:<minimize|maximize|close|desktop|switch>" o "none".
+    "calibration": {},               # last measurement: light, fps, hand size, dominant hand
+    # Gesture → action. Actions: one of HUB_ACTIONS, "media:<key>", "keys:ctrl+shift+m", "run:<program>",
+    # "window:<minimize|maximize|close|desktop|switch>" or "none".
     "gesture_actions": {
         "swipe_left": "next", "swipe_right": "previous", "open_palm": "toggle",
         "thumb_up": "volume_up", "thumb_down": "volume_down", "pointing_up": "listen",
@@ -60,7 +60,7 @@ class Settings:
             saved = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             for key, value in saved.items():
                 if isinstance(value, dict) and isinstance(DEFAULTS.get(key), dict):
-                    value = {**DEFAULTS[key], **value}   # así aparecen las claves nuevas
+                    value = {**DEFAULTS[key], **value}   # so new keys show up
                 self._data[key] = value
 
     def __getitem__(self, key):

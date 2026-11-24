@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cortex · demo web</title>
+<title>Cortex · web demo</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,7 +42,7 @@
   <symbol id="i-ear" viewBox="0 0 24 24"><path d="M6.5 9a5.5 5.5 0 0 1 11 0c0 3-2.5 4-2.5 6.5a3 3 0 0 1-5.5 1.6"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-1.5 1.8-1.5 3"/></symbol>
   <symbol id="i-ear-off" viewBox="0 0 24 24"><path d="M6.5 9a5.5 5.5 0 0 1 9.4-3.9M17.5 9c0 3-2.5 4-2.5 6.5a3 3 0 0 1-5.5 1.6M3 3l18 18"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
-  <!-- tiempo -->
+  <!-- weather -->
   <symbol id="w-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="w-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5H7Z"/></symbol>
   <symbol id="w-cloud-sun" viewBox="0 0 24 24"><path d="M9 3v1.5M3.6 5.6l1 1M2 11h1.5M13.4 5.6l-1 1"/><path d="M5.5 11.5A4 4 0 0 1 12.7 9"/><path d="M9 20a3.8 3.8 0 0 1-.4-7.6A5 5 0 0 1 18.3 13a3.5 3.5 0 0 1-.3 7H9Z"/></symbol>
@@ -55,41 +55,41 @@
 
 <header class="top">
   <div class="hello">
-    <h1 id="greeting">Hola</h1>
+    <h1 id="greeting">Hello</h1>
     <p id="date"></p>
   </div>
   <div class="top-music" id="topMusic"></div>
   <div class="top-right">
-    <button class="chip" id="morningChip" title="Resumen matinal: correos, tiempo, fútbol, tu día, tareas y avisos">🌅</button>
-    <button class="chip" id="quietChip" title="Modo silencio: los avisos no se dicen en voz alta">🔔</button>
-    <span class="chip meter-chip" id="batteryChip" hidden title="Batería del portátil"></span>
-    <span class="chip meter-chip" id="creditsChip" hidden title="Uso de Claude (límite de la sesión)"></span>
-    <button class="chip" id="weatherChip" hidden title="El tiempo"><svg><use href="#w-sun"/></svg><b></b></button>
+    <button class="chip" id="morningChip" title="Morning briefing: email, weather, football, your day, tasks and reminders">🌅</button>
+    <button class="chip" id="quietChip" title="Quiet mode: reminders are not spoken aloud">🔔</button>
+    <span class="chip meter-chip" id="batteryChip" hidden title="Laptop battery"></span>
+    <span class="chip meter-chip" id="creditsChip" hidden title="Claude usage (session limit)"></span>
+    <button class="chip" id="weatherChip" hidden title="Weather"><svg><use href="#w-sun"/></svg><b></b></button>
     <div class="clock" id="clock">--:--</div>
-    <!-- micro: negro en reposo, verde cuando escucha o habla; al pasar el ratón se ve la conversación -->
+    <!-- mic: black at rest, green when listening or speaking; hover shows the conversation -->
     <div class="voice" id="voice">
       <div class="voice-pill" id="voicePill">
         <div class="bars" id="bars"><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="voice-text"><b id="stateLabel">Di «Cortex» o pulsa</b><span id="stateSub"></span></div>
+        <div class="voice-text"><b id="stateLabel">Say "Cortex" or press</b><span id="stateSub"></span></div>
       </div>
-      <button class="talk" id="talkBtn" aria-label="Hablar con el asistente de voz" title="Hablar con el asistente de voz (espacio)">
+      <button class="talk" id="talkBtn" aria-label="Talk to the voice assistant" title="Talk to the voice assistant (space)">
         <svg class="ico-mic"><use href="#i-mic"/></svg>
         <svg class="ico-stop"><use href="#i-stop"/></svg>
       </button>
     </div>
     <div class="tools">
-      <button class="icon-btn" id="cameraBtn" title="Ver cámara y gestos"><svg><use href="#i-camera"/></svg></button>
-      <button class="icon-btn" id="wakeBtn" title="Escuchar «Cortex»"><svg><use href="#i-ear"/></svg></button>
-      <button class="icon-btn" id="editBtn" title="Personalizar panel"><svg><use href="#i-layout"/></svg></button>
-      <button class="icon-btn" id="fullBtn" title="Pantalla completa"><svg><use href="#i-expand"/></svg></button>
-      <button class="icon-btn" id="settingsBtn" title="Ajustes"><svg><use href="#i-gear"/></svg></button>
+      <button class="icon-btn" id="cameraBtn" title="View camera and gestures"><svg><use href="#i-camera"/></svg></button>
+      <button class="icon-btn" id="wakeBtn" title="Listen for &quot;Cortex&quot;"><svg><use href="#i-ear"/></svg></button>
+      <button class="icon-btn" id="editBtn" title="Customize dashboard"><svg><use href="#i-layout"/></svg></button>
+      <button class="icon-btn" id="fullBtn" title="Fullscreen"><svg><use href="#i-expand"/></svg></button>
+      <button class="icon-btn" id="settingsBtn" title="Settings"><svg><use href="#i-gear"/></svg></button>
     </div>
   </div>
 </header>
 
-<!-- el tiempo: se despliega desde su botón de arriba (ya no es una tarjeta) -->
+<!-- weather: pops out from its button above (no longer a card) -->
 <section class="card weather weather-pop" id="weatherPop" hidden>
-  <div class="card-head"><h2>Tiempo</h2><span class="sp-device" id="wPlace"></span></div>
+  <div class="card-head"><h2>Weather</h2><span class="sp-device" id="wPlace"></span></div>
   <div class="w-now">
     <svg class="w-icon" id="wIcon"><use href="#w-sun"/></svg>
     <div><div class="w-temp" id="wTemp">--°</div><div class="note" id="wText"></div></div>
@@ -98,39 +98,39 @@
   <div class="w-days" id="wDays"></div>
 </section>
 
-<!-- barra de edición del panel -->
+<!-- dashboard edit bar -->
 <div class="editbar" id="editbar" hidden>
-  <div class="editbar-text"><b>Personalizar</b><span>Arrastra las tarjetas y estíralas desde la bolita verde. Toca para mostrar u ocultar:</span></div>
+  <div class="editbar-text"><b>Customize</b><span>Drag the cards and resize them from the green dot. Tap to show or hide:</span></div>
   <div class="widget-chips" id="widgetChips"></div>
   <div class="editbar-actions">
-    <button class="text-btn" id="resetLayout">Restablecer</button>
-    <button class="btn" id="doneEdit"><svg><use href="#i-check"/></svg>Listo</button>
+    <button class="text-btn" id="resetLayout">Reset</button>
+    <button class="btn" id="doneEdit"><svg><use href="#i-check"/></svg>Done</button>
   </div>
 </div>
 
 <main class="grid-stack" id="grid"></main>
-<!-- tarjeta abierta en grande (las demás se encogen a la derecha) -->
-<section class="focus" id="focus"><button class="focus-close" id="focusClose" aria-label="Cerrar" title="Cerrar (Esc)"><svg><use href="#i-x"/></svg></button></section>
-<!-- la conversación sale al pasar el ratón por el micro -->
+<!-- card opened full size (the others shrink to the right) -->
+<section class="focus" id="focus"><button class="focus-close" id="focusClose" aria-label="Close" title="Close (Esc)"><svg><use href="#i-x"/></svg></button></section>
+<!-- the conversation appears on hovering the mic -->
 <aside class="chat-pop" id="chatPop"></aside>
 
 <template id="tpl-chat">
   <section class="card chat">
     <div class="card-head">
-      <h2>Conversación</h2>
-      <button class="text-btn" id="newChatBtn"><svg><use href="#i-plus"/></svg>Nueva</button>
+      <h2>Conversation</h2>
+      <button class="text-btn" id="newChatBtn"><svg><use href="#i-plus"/></svg>New</button>
     </div>
     <div class="messages" id="messages"></div>
     <form class="composer" id="composer">
-      <input id="textInput" autocomplete="off" placeholder="Escríbele al asistente…">
-      <button type="submit" class="send" aria-label="Enviar"><svg><use href="#i-send"/></svg></button>
+      <input id="textInput" autocomplete="off" placeholder="Type to the assistant…">
+      <button type="submit" class="send" aria-label="Send"><svg><use href="#i-send"/></svg></button>
     </form>
   </section>
 </template>
 
 <template id="tpl-status">
   <section class="card">
-    <div class="card-head"><h2>Estado</h2></div>
+    <div class="card-head"><h2>Status</h2></div>
     <ul class="status scroll" id="statusList"></ul>
   </section>
 </template>
@@ -140,30 +140,30 @@
     <div class="pl-bg" id="spBg"></div>
     <div class="pl-off" id="spOff" hidden>
       <span class="pl-note"><svg><use href="#i-note"/></svg></span>
-      <span id="spOffText">Conecta tu cuenta para poner música por voz.</span>
-      <a class="btn primary" href="/spotify/login" id="spConnect">Conectar Spotify</a>
+      <span id="spOffText">Connect your account to play music by voice.</span>
+      <a class="btn primary" href="/spotify/login" id="spConnect">Connect Spotify</a>
     </div>
     <div class="pl-on" id="spOn" hidden>
       <div class="sp-cover" id="spCover"><svg><use href="#i-note"/></svg></div>
       <div class="pl-meta">
-        <div class="sp-title" id="spTitle">Nada sonando</div>
-        <div class="sp-artist"><span id="spArtist">Di «Cortex, pon la playlist…»</span><span class="sp-device" id="spDevice"></span></div>
+        <div class="sp-title" id="spTitle">Nothing playing</div>
+        <div class="sp-artist"><span id="spArtist">Say "Cortex, play the playlist…"</span><span class="sp-device" id="spDevice"></span></div>
         <div class="sp-progress"><span id="spProgress"></span></div>
       </div>
       <div class="pl-ctrl">
-        <button class="pl-btn" data-sp="previous" aria-label="Anterior"><svg><use href="#i-prev"/></svg></button>
-        <button class="sp-play" data-sp="toggle" aria-label="Reproducir o pausar"><svg><use href="#i-play" id="spPlayIcon"/></svg></button>
-        <button class="pl-btn" data-sp="next" aria-label="Siguiente"><svg><use href="#i-next"/></svg></button>
+        <button class="pl-btn" data-sp="previous" aria-label="Previous"><svg><use href="#i-prev"/></svg></button>
+        <button class="sp-play" data-sp="toggle" aria-label="Play or pause"><svg><use href="#i-play" id="spPlayIcon"/></svg></button>
+        <button class="pl-btn" data-sp="next" aria-label="Next"><svg><use href="#i-next"/></svg></button>
       </div>
-      <label class="pl-vol" title="Volumen"><svg><use href="#i-vol"/></svg><input type="range" min="0" max="100" id="spVolume" aria-label="Volumen"></label>
+      <label class="pl-vol" title="Volume"><svg><use href="#i-vol"/></svg><input type="range" min="0" max="100" id="spVolume" aria-label="Volume"></label>
     </div>
   </section>
 </template>
 
 <template id="tpl-gestures">
   <section class="card gestures">
-    <div class="card-head"><h2>Gestos</h2><button class="text-btn" data-open-camera><svg><use href="#i-camera"/></svg>Ver cámara</button></div>
-    <div class="g-state" id="gState"><i></i><span>Cámara apagada</span></div>
+    <div class="card-head"><h2>Gestures</h2><button class="text-btn" data-open-camera><svg><use href="#i-camera"/></svg>View camera</button></div>
+    <div class="g-state" id="gState"><i></i><span>Camera off</span></div>
     <div class="g-last" id="gLast"></div>
     <ul class="g-map scroll" id="gMap"></ul>
   </section>
@@ -171,15 +171,15 @@
 
 <template id="tpl-avisos">
   <section class="card">
-    <div class="card-head"><h2>Avisos</h2><button class="text-btn" id="avisoAddBtn"><svg><use href="#i-plus"/></svg>Nuevo</button></div>
+    <div class="card-head"><h2>Reminders</h2><button class="text-btn" id="avisoAddBtn"><svg><use href="#i-plus"/></svg>New</button></div>
     <form class="aviso-form" id="avisoForm" hidden>
-      <input class="input" name="texto" placeholder="¿Qué te recuerdo?" required maxlength="120">
+      <input class="input" name="texto" placeholder="What should I remind you of?" required maxlength="120">
       <input class="input" name="cuando" type="datetime-local" required>
       <select class="input" name="repetir">
-        <option value="">Una vez</option><option value="diario">Cada día</option><option value="laborables">Laborables</option>
-        <option value="findes">Fines de semana</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option>
+        <option value="">Once</option><option value="diario">Every day</option><option value="laborables">Weekdays</option>
+        <option value="findes">Weekends</option><option value="semanal">Every week</option><option value="mensual">Every month</option>
       </select>
-      <button class="btn" type="submit">Guardar</button>
+      <button class="btn" type="submit">Save</button>
     </form>
     <ul class="rows avisos scroll" id="avisosList"></ul>
   </section>
@@ -187,21 +187,21 @@
 
 <template id="tpl-today">
   <section class="card">
-    <div class="card-head"><h2>Hoy</h2><span class="pill" id="todayMode"></span><button class="icon-btn sm" data-edit="horario" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Today</h2><span class="pill" id="todayMode"></span><button class="icon-btn sm" data-edit="horario" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <ul class="timeline scroll" id="todayList"></ul>
   </section>
 </template>
 
 <template id="tpl-tasks">
   <section class="card">
-    <div class="card-head"><h2>Tareas</h2><span class="count" id="tasksCount"></span><button class="text-btn" id="taskAddBtn"><svg><use href="#i-plus"/></svg>Nueva</button></div>
+    <div class="card-head"><h2>Tasks</h2><span class="count" id="tasksCount"></span><button class="text-btn" id="taskAddBtn"><svg><use href="#i-plus"/></svg>New</button></div>
     <ul class="tasks scroll" id="tasksList"></ul>
   </section>
 </template>
 
 <template id="tpl-betis">
   <section class="card">
-    <div class="card-head"><h2>Betis</h2><button class="icon-btn sm" data-edit="betis" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Betis</h2><button class="icon-btn sm" data-edit="betis" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <div class="betis-next" id="betisNext"></div>
     <ul class="rows scroll" id="betisList"></ul>
   </section>
@@ -209,7 +209,7 @@
 
 <template id="tpl-gym">
   <section class="card">
-    <div class="card-head"><h2>Gym</h2><button class="icon-btn sm" data-edit="gym" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Gym</h2><button class="icon-btn sm" data-edit="gym" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <div class="big" id="gymToday"></div>
     <p class="note" id="gymNext"></p>
     <ul class="rows detail scroll" id="gymWeek"></ul>
@@ -219,31 +219,31 @@
 
 <template id="tpl-meals">
   <section class="card">
-    <div class="card-head"><h2>Comidas</h2><button class="icon-btn sm" data-edit="comidas" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Meals</h2><button class="icon-btn sm" data-edit="comidas" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <ul class="rows scroll" id="mealsList"></ul>
   </section>
 </template>
 
 <template id="tpl-search">
   <section class="card search">
-    <div class="card-head"><h2>Vídeos</h2></div>
+    <div class="card-head"><h2>Videos</h2></div>
     <form class="search-form" id="searchForm" autocomplete="off">
       <svg><use href="#i-search"/></svg>
-      <input class="input" id="searchInput" placeholder="Busca en YouTube…" enterkeyhint="search">
+      <input class="input" id="searchInput" placeholder="Search YouTube…" enterkeyhint="search">
     </form>
     <div class="v-now" id="videoNow" hidden>
       <div class="v-info"><b id="videoTitle"></b><small id="videoTime"></small><span class="v-prog"><i id="videoProg"></i></span></div>
       <div class="v-ctrl" id="videoCtrl">
         <button class="icon-btn small" data-v="seek" data-val="-10" title="−10 s">−10</button>
-        <button class="icon-btn small" data-v="toggle" title="Pausa"><svg><use href="#i-pause" id="videoPP"/></svg></button>
+        <button class="icon-btn small" data-v="toggle" title="Pause"><svg><use href="#i-pause" id="videoPP"/></svg></button>
         <button class="icon-btn small" data-v="seek" data-val="10" title="+10 s">+10</button>
-        <button class="text-btn" id="videoDock" data-v="undock" title="Sacarlo a una ventana (para iniciar sesión)" hidden>Ventana</button>
+        <button class="text-btn" id="videoDock" data-v="undock" title="Pop out to a window (to sign in)" hidden>Window</button>
         <button class="icon-btn small" data-v="fullscreen" title="Pantalla completa"><svg><use href="#i-expand"/></svg></button>
-        <button class="icon-btn small" data-v="stop" title="Quitar"><svg><use href="#i-x"/></svg></button>
+        <button class="icon-btn small" data-v="stop" title="Remove"><svg><use href="#i-x"/></svg></button>
       </div>
     </div>
     <div class="v-screen" id="videoScreen" hidden></div>
-    <ul class="results yt scroll" id="searchResults"><li class="r-empty">Busca algo o di «Cortex, pon en YouTube…». Sin anuncios.</li></ul>
+    <ul class="results yt scroll" id="searchResults"><li class="r-empty">Search for something or say "Cortex, play on YouTube…". No ads.</li></ul>
     <div class="s-foot">
       <div class="v-apps" id="videoApps"></div>
     </div>
@@ -252,7 +252,7 @@
 
 <template id="tpl-timers">
   <section class="card timers">
-    <div class="card-head"><h2>Temporizadores</h2></div>
+    <div class="card-head"><h2>Timers</h2></div>
     <ul class="timer-list scroll" id="timerList"></ul>
     <div class="timer-quick" id="timerQuick">
       <button data-min="3">3′</button><button data-min="5">5′</button>
@@ -263,11 +263,11 @@
 
 <template id="tpl-devices">
   <section class="card devices">
-    <div class="card-head"><h2>Dispositivos</h2><button class="text-btn" id="devScan">Buscar</button></div>
+    <div class="card-head"><h2>Devices</h2><button class="text-btn" id="devScan">Scan</button></div>
     <div class="scroll dev-body">
-      <div class="dev-sec">Poner la música en</div>
+      <div class="dev-sec">Play music on</div>
       <ul class="dev-list" id="devMusic"></ul>
-      <div class="dev-sec">En la red de casa</div>
+      <div class="dev-sec">On the home network</div>
       <ul class="dev-list" id="devLan"></ul>
     </div>
   </section>
@@ -275,24 +275,24 @@
 
 <template id="tpl-mail">
   <section class="card mail">
-    <div class="card-head"><h2>Correo</h2><span class="count" id="mailCount"></span><button class="text-btn" id="mailAccounts">Cuentas</button><button class="text-btn reload" id="mailCheck" title="Mirar si hay correo nuevo"><svg><use href="#i-refresh"/></svg>Recargar</button></div>
+    <div class="card-head"><h2>Mail</h2><span class="count" id="mailCount"></span><button class="text-btn" id="mailAccounts">Accounts</button><button class="text-btn reload" id="mailCheck" title="Check for new mail"><svg><use href="#i-refresh"/></svg>Refresh</button></div>
     <ul class="rows mail-list scroll" id="mailList"></ul>
   </section>
 </template>
 
 <template id="tpl-whatsapp">
   <section class="card whatsapp">
-    <div class="card-head"><h2>WhatsApp</h2><span class="count" id="waState"></span><button class="text-btn reload" id="waCheck" title="Mirar si hay mensajes nuevos"><svg><use href="#i-refresh"/></svg>Recargar</button></div>
+    <div class="card-head"><h2>WhatsApp</h2><span class="count" id="waState"></span><button class="text-btn reload" id="waCheck" title="Check for new messages"><svg><use href="#i-refresh"/></svg>Refresh</button></div>
     <ul class="rows mail-list wa-list scroll" id="waList"></ul>
   </section>
 </template>
 
 <template id="tpl-compra">
   <section class="card compra">
-    <div class="card-head"><h2>Compra</h2><button class="text-btn" id="compraClear" hidden>Quitar lo comprado</button></div>
+    <div class="card-head"><h2>Shopping</h2><button class="text-btn" id="compraClear" hidden>Clear purchased</button></div>
     <form class="search-form" id="compraForm" autocomplete="off">
       <svg><use href="#i-plus"/></svg>
-      <input class="input" id="compraInput" placeholder="Añadir (leche, huevos…)">
+      <input class="input" id="compraInput" placeholder="Add (milk, eggs…)">
     </form>
     <ul class="checklist scroll" id="compraList"></ul>
   </section>
@@ -300,7 +300,7 @@
 
 <template id="tpl-money">
   <section class="card money">
-    <div class="card-head"><h2>Dinero</h2><span class="sp-device" id="moneyUpdated"></span><button class="icon-btn sm" data-edit="dinero" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Money</h2><span class="sp-device" id="moneyUpdated"></span><button class="icon-btn sm" data-edit="dinero" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <div class="stats" id="moneyStats"></div>
     <ul class="moves scroll" id="moneyMoves"></ul>
   </section>
@@ -308,52 +308,52 @@
 
 <template id="tpl-fechas">
   <section class="card">
-    <div class="card-head"><h2>Fechas</h2><button class="icon-btn sm" data-edit="fechas" aria-label="Editar" title="Editar"><svg><use href="#i-pencil"/></svg></button></div>
+    <div class="card-head"><h2>Dates</h2><button class="icon-btn sm" data-edit="fechas" aria-label="Edit" title="Edit"><svg><use href="#i-pencil"/></svg></button></div>
     <ul class="rows scroll" id="datesList"></ul>
   </section>
 </template>
 
-<!-- aviso grande de gesto reconocido -->
+<!-- large notice for a recognised gesture -->
 <div class="gesture-flash" id="gestureFlash" hidden><svg><use href="#i-hand"/></svg><span></span></div>
 
-<!-- editar datos (tareas, comidas…) -->
+<!-- edit data (tasks, meals…) -->
 <div class="modal" id="editModal" hidden>
   <div class="modal-card edit-card">
     <div class="drawer-head">
-      <h2>Editar</h2>
+      <h2>Edit</h2>
       <nav class="tabs edit-tabs" id="editTabs"></nav>
-      <button class="icon-btn" data-close aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
+      <button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button>
     </div>
-    <p class="note">Cambia el texto y guarda. Mantén los espacios del principio de cada línea: marcan qué va dentro de qué.
-      Si algo no cuadra, no se guarda y te dice dónde. También puedes pedírselo a Cortex: «Cortex, marca como hecha…».</p>
+    <p class="note">Change the text and save. Keep the leading spaces on each line: they mark what nests inside what.
+      If something does not fit, it is not saved and you are told where. You can also ask Cortex: "Cortex, mark it as done…".</p>
     <textarea id="editText" spellcheck="false"></textarea>
     <div class="edit-foot">
       <span class="edit-error" id="editError"></span>
-      <button class="text-btn" data-close>Cancelar</button>
-      <button class="btn primary" id="editSave"><svg><use href="#i-check"/></svg>Guardar</button>
+      <button class="text-btn" data-close>Cancel</button>
+      <button class="btn primary" id="editSave"><svg><use href="#i-check"/></svg>Save</button>
     </div>
   </div>
 </div>
 
-<!-- cámara (pruebas) -->
+<!-- camera (testing) -->
 <div class="modal" id="cameraModal" hidden>
   <div class="modal-card camera-card">
     <div class="drawer-head">
-      <h2>Cámara y gestos</h2>
-      <button class="icon-btn" data-close aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
+      <h2>Camera and gestures</h2>
+      <button class="icon-btn" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button>
     </div>
     <div class="camera-body">
       <div class="camera-view">
-        <img id="cameraImg" alt="Vista de la cámara">
-        <div class="camera-off" id="cameraOff" hidden>La cámara está apagada. Actívala en Ajustes → Gestos.</div>
+        <img id="cameraImg" alt="Camera view">
+        <div class="camera-off" id="cameraOff" hidden>The camera is off. Turn it on in Settings → Gestures.</div>
       </div>
       <div class="camera-side">
         <ul class="status" id="visionList"></ul>
-        <div class="field">Gesto propio
-          <small>Pon la mano en la postura que quieras, ponle nombre y pulsa grabar (3 s).</small>
+        <div class="field">Custom gesture
+          <small>Hold your hand in any pose, name it and press record (3 s).</small>
           <span class="with-btn">
-            <input id="customName" class="input" placeholder="p. ej. rock" maxlength="24">
-            <button type="button" class="btn" id="recordCustom"><svg><use href="#i-rec"/></svg>Grabar</button>
+            <input id="customName" class="input" placeholder="e.g. rock" maxlength="24">
+            <button type="button" class="btn" id="recordCustom"><svg><use href="#i-rec"/></svg>Record</button>
           </span>
           <div class="rec-bar" id="recBar" hidden><span></span></div>
         </div>
@@ -363,7 +363,7 @@
   </div>
 </div>
 
-<!-- modo reposo: reloj grande cuando nadie mira -->
+<!-- idle mode: big clock when nobody is looking -->
 <div class="ambient" id="ambient" hidden>
   <div class="amb-clock" id="ambClock">--:--</div>
   <div class="amb-date" id="ambDate"></div>
@@ -373,63 +373,63 @@
 
 <aside class="drawer" id="drawer" hidden>
   <div class="drawer-head">
-    <h2>Ajustes</h2>
-    <button class="icon-btn" id="closeDrawer" aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
+    <h2>Settings</h2>
+    <button class="icon-btn" id="closeDrawer" aria-label="Close"><svg><use href="#i-x"/></svg></button>
   </div>
   <nav class="tabs" id="settingsTabs">
-    <button type="button" data-tab="voz" class="sel">Voz</button>
-    <button type="button" data-tab="gestos">Gestos</button>
-    <button type="button" data-tab="musica">Música</button>
-    <button type="button" data-tab="video">Vídeo</button>
-    <button type="button" data-tab="pantalla">Pantalla</button>
-    <button type="button" data-tab="cerebro">Cerebro</button>
+    <button type="button" data-tab="voz" class="sel">Voice</button>
+    <button type="button" data-tab="gestos">Gestures</button>
+    <button type="button" data-tab="musica">Music</button>
+    <button type="button" data-tab="video">Video</button>
+    <button type="button" data-tab="pantalla">Display</button>
+    <button type="button" data-tab="cerebro">Brain</button>
   </nav>
   <form id="settingsForm" class="settings">
     <div class="tab" data-tab="voz">
       <section>
-        <h3>Asistente de voz · palabra «Cortex»</h3>
-        <p class="setup-demo">Mientras espera «Cortex», el micro está siempre encendido y puede activarse por error. Ese audio se procesa en este equipo; lo que le dices o escribes se envía a Claude, y las respuestas se leen con la voz en línea de Microsoft Edge.</p>
-        <label class="row">Escuchar siempre <input type="checkbox" name="wake_enabled" class="switch"></label>
-        <div class="field">Sensibilidad
+        <h3>Voice assistant · wake word "Cortex"</h3>
+        <p class="setup-demo">While waiting for "Cortex", the mic is always on and may trigger by mistake. That audio is processed on this computer; what you say or type is sent to Claude, and replies are read aloud with the Microsoft Edge online voice.</p>
+        <label class="row">Always listen <input type="checkbox" name="wake_enabled" class="switch"></label>
+        <div class="field">Sensitivity
           <div class="segmented" data-name="wake_sensitivity">
-            <button type="button" data-value="1">Baja</button>
-            <button type="button" data-value="2">Media</button>
-            <button type="button" data-value="3">Alta</button>
+            <button type="button" data-value="1">Low</button>
+            <button type="button" data-value="2">Medium</button>
+            <button type="button" data-value="3">High</button>
           </div>
-          <small>Baja si se activa sola; alta si no te oye.</small>
+          <small>Low if it triggers by itself; high if it does not hear you.</small>
         </div>
-        <div class="field">Tu voz
-          <small id="enrollInfo">Graba «Cortex» unas cuantas veces para que te reconozca mejor.</small>
+        <div class="field">Your voice
+          <small id="enrollInfo">Record "Cortex" a few times so it recognises you better.</small>
           <span class="with-btn">
-            <button type="button" class="btn" id="enrollBtn">Grabar mis «Cortex»</button>
-            <button type="button" class="text-btn" id="enrollClear">Borrar</button>
+            <button type="button" class="btn" id="enrollBtn">Record my "Cortex"</button>
+            <button type="button" class="text-btn" id="enrollClear">Clear</button>
           </span>
         </div>
         <div class="heard" id="lastHeard" hidden></div>
         <div class="field">Detector
-          <small id="trainInfo">Aprende solo: cada noche se reentrena con las veces que lo activaste de verdad y las falsas alarmas.</small>
-          <span class="with-btn"><button type="button" class="text-btn" id="retrainBtn">Reentrenar ahora</button></span>
+          <small id="trainInfo">Learns on its own: every night it retrains on the times you really triggered it and the false alarms.</small>
+          <span class="with-btn"><button type="button" class="text-btn" id="retrainBtn">Retrain now</button></span>
         </div>
       </section>
       <section>
         <h3>Audio</h3>
-        <label class="field">Micrófono <select name="mic_device"></select></label>
-        <label class="field">Altavoz <select name="speaker_device"></select></label>
-        <button type="button" class="text-btn" id="refreshDevices">Buscar dispositivos</button>
+        <label class="field">Microphone <select name="mic_device"></select></label>
+        <label class="field">Speaker <select name="speaker_device"></select></label>
+        <button type="button" class="text-btn" id="refreshDevices">Scan for devices</button>
       </section>
       <section>
-        <h3>Cómo habla</h3>
-        <label class="field">Voz
-          <span class="with-btn"><select name="voice_es"></select><button type="button" class="icon-btn small" data-test="es" aria-label="Probar"><svg><use href="#i-play"/></svg></button></span>
+        <h3>How it speaks</h3>
+        <label class="field">Voice
+          <span class="with-btn"><select name="voice_es"></select><button type="button" class="icon-btn small" data-test="es" aria-label="Test"><svg><use href="#i-play"/></svg></button></span>
         </label>
-        <label class="field">Velocidad <span class="range"><input type="range" name="tts_rate" min="-20" max="50" step="5"><output id="rateOut"></output></span></label>
-        <label class="field">Motor
+        <label class="field">Speed <span class="range"><input type="range" name="tts_rate" min="-20" max="50" step="5"><output id="rateOut"></output></span></label>
+        <label class="field">Engine
           <select name="tts_engine">
-            <option value="edge">Edge, con Piper de respaldo</option>
-            <option value="piper">Solo Piper (local)</option>
+            <option value="edge">Edge, with Piper as fallback</option>
+            <option value="piper">Piper only (local)</option>
           </select>
         </label>
-        <label class="field">Segundos para responder sin decir «Cortex»
+        <label class="field">Seconds to reply without saying "Cortex"
           <input type="number" name="followup_seconds" min="0" max="15">
         </label>
       </section>
@@ -437,13 +437,13 @@
 
     <div class="tab" data-tab="gestos" hidden>
       <section>
-        <h3>Cámara</h3>
-        <label class="row">Gestos con la mano <input type="checkbox" name="gestures_enabled" class="switch"></label>
-        <label class="row">Solo cuando miro a la pantalla <input type="checkbox" name="gestures_require_look" class="switch"></label>
-        <button type="button" class="btn" data-open-camera><svg><use href="#i-camera"/></svg>Ver cámara</button>
+        <h3>Camera</h3>
+        <label class="row">Hand gestures <input type="checkbox" name="gestures_enabled" class="switch"></label>
+        <label class="row">Only when I look at the screen <input type="checkbox" name="gestures_require_look" class="switch"></label>
+        <button type="button" class="btn" data-open-camera><svg><use href="#i-camera"/></svg>View camera</button>
       </section>
       <section>
-        <h3>Qué hace cada gesto</h3>
+        <h3>What each gesture does</h3>
         <div class="gesture-table" id="gestureTable"></div>
       </section>
     </div>
@@ -453,30 +453,30 @@
         <h3>Spotify</h3>
         <div class="field"><small id="spSettingsInfo"></small>
           <span class="with-btn">
-            <a class="btn" href="/spotify/login" id="spSettingsConnect">Conectar</a>
-            <button type="button" class="text-btn" id="spLogout">Desconectar</button>
+            <a class="btn" href="/spotify/login" id="spSettingsConnect">Connect</a>
+            <button type="button" class="text-btn" id="spLogout">Disconnect</button>
           </span>
         </div>
-        <label class="field">Dónde suena <select name="spotify_device"></select></label>
+        <label class="field">Play on <select name="spotify_device"></select></label>
       </section>
     </div>
 
     <div class="tab" data-tab="video" hidden>
       <section>
-        <h3>Webs de vídeo</h3>
-        <small class="hint">Di «Cortex, busca X en &lt;web&gt;». Para guardar una con nombre: «guarda esta web como X».</small>
+        <h3>Video sites</h3>
+        <small class="hint">Say "Cortex, search X on &lt;site&gt;". To save one with a name: "save this site as X".</small>
         <ul class="acc-list" id="webList"></ul>
       </section>
       <section>
-        <h3>Cuentas para iniciar sesión solo</h3>
-        <small class="hint">La contraseña se guarda cifrada en el Administrador de credenciales de Windows (nunca en Drive).
-          Cortex la usa cuando esa web pide iniciar sesión.</small>
+        <h3>Accounts for automatic sign-in</h3>
+        <small class="hint">The password is stored encrypted in Windows Credential Manager (never in Drive).
+          Cortex uses it when that site asks you to sign in.</small>
         <ul class="acc-list" id="accList"></ul>
         <div class="acc-form">
-          <input class="input" id="accSite" placeholder="Web (p. ej. netflix.com)" autocomplete="off">
-          <input class="input" id="accUser" placeholder="Usuario o correo" autocomplete="off">
-          <input class="input" id="accPass" type="password" placeholder="Contraseña" autocomplete="new-password">
-          <button type="button" class="btn" id="accSave">Guardar</button>
+          <input class="input" id="accSite" placeholder="Site (e.g. netflix.com)" autocomplete="off">
+          <input class="input" id="accUser" placeholder="Username or email" autocomplete="off">
+          <input class="input" id="accPass" type="password" placeholder="Password" autocomplete="new-password">
+          <button type="button" class="btn" id="accSave">Save</button>
         </div>
         <small class="note" id="accMsg"></small>
       </section>
@@ -484,37 +484,37 @@
 
     <div class="tab" data-tab="pantalla" hidden>
       <section>
-        <h3>Aspecto</h3>
-        <div class="field">Tema
+        <h3>Appearance</h3>
+        <div class="field">Theme
           <div class="segmented" data-name="theme">
-            <button type="button" data-value="light">Claro</button>
-            <button type="button" data-value="dark">Oscuro</button>
+            <button type="button" data-value="light">Light</button>
+            <button type="button" data-value="dark">Dark</button>
             <button type="button" data-value="auto">Auto</button>
           </div>
         </div>
         <div class="field">Color
           <div class="swatches" id="accentSwatches"></div>
         </div>
-        <div class="field">Tamaño del texto
+        <div class="field">Text size
           <div class="segmented" data-name="text_scale">
-            <button type="button" data-value="0.9">Pequeño</button>
+            <button type="button" data-value="0.9">Small</button>
             <button type="button" data-value="1">Normal</button>
-            <button type="button" data-value="1.12">Grande</button>
+            <button type="button" data-value="1.12">Large</button>
           </div>
         </div>
-        <button type="button" class="text-btn" id="openEditor"><svg><use href="#i-layout"/></svg>Elegir y colocar tarjetas</button>
+        <button type="button" class="text-btn" id="openEditor"><svg><use href="#i-layout"/></svg>Choose and arrange cards</button>
       </section>
       <section>
-        <h3>Reposo</h3>
-        <label class="field">Reloj grande tras (min sin usarlo; 0 = nunca)
+        <h3>Idle</h3>
+        <label class="field">Big clock after (minutes idle; 0 = never)
           <input type="number" name="ambient_minutes" min="0" max="240">
         </label>
-        <small class="hint">Si los gestos están activos, se quita solo cuando miras a la pantalla.</small>
+        <small class="hint">If gestures are on, it goes away by itself when you look at the screen.</small>
       </section>
       <section>
-        <h3>Tiempo</h3>
-        <label class="field">Ciudad
-          <span class="with-btn"><input class="input" id="weatherCity" placeholder="Madrid"><button type="button" class="btn" id="weatherSave">Guardar</button></span>
+        <h3>Weather</h3>
+        <label class="field">City
+          <span class="with-btn"><input class="input" id="weatherCity" placeholder="Madrid"><button type="button" class="btn" id="weatherSave">Save</button></span>
         </label>
       </section>
     </div>
@@ -522,27 +522,27 @@
     <div class="tab" data-tab="cerebro" hidden>
       <section>
         <h3>Claude</h3>
-        <label class="field">Modelo <select name="claude_model"></select></label>
-        <label class="field">Conversación nueva tras (min sin hablar)
+        <label class="field">Model <select name="claude_model"></select></label>
+        <label class="field">New conversation after (minutes of silence)
           <input type="number" name="session_idle_minutes" min="1" max="1440">
         </label>
-        <label class="field">Transcripción <select name="stt_model"></select></label>
+        <label class="field">Transcription <select name="stt_model"></select></label>
       </section>
       <section>
         <h3>WhatsApp</h3>
-        <div class="field">Qué puede hacer
+        <div class="field">What it can do
           <div class="segmented" data-name="whatsapp_mode">
-            <button type="button" data-value="read">Solo leer</button>
-            <button type="button" data-value="write">Leer y escribir</button>
+            <button type="button" data-value="read">Read only</button>
+            <button type="button" data-value="write">Read and write</button>
           </div>
-          <small>Usa un cliente no oficial (whatsmeow) vinculado como dispositivo: WhatsApp podría limitar o bloquear la cuenta, y más si envías mensajes. El asistente nunca envía; solo tú, desde un chat abierto.</small>
+          <small>Uses an unofficial client (whatsmeow) linked as a device: WhatsApp may limit or ban the account, more so if you send messages. The assistant never sends; only you do, from an open chat.</small>
         </div>
       </section>
       <section>
         <h3>Cortex</h3>
-        <label class="row">Mover ventanas con gestos (webcam; al reiniciar) <input type="checkbox" name="window_gestures" class="switch"></label>
-        <button type="button" class="btn" id="openSetup">Asistente de configuración</button>
-        <button type="button" class="text-btn" id="quitApp">Cerrar Cortex</button>
+        <label class="row">Move windows with gestures (webcam; on restart) <input type="checkbox" name="window_gestures" class="switch"></label>
+        <button type="button" class="btn" id="openSetup">Setup assistant</button>
+        <button type="button" class="text-btn" id="quitApp">Quit Cortex</button>
       </section>
     </div>
   </form>

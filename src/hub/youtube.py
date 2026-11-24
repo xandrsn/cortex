@@ -1,4 +1,4 @@
-"""Vídeos de YouTube para el widget del panel: búsqueda leyendo la página de resultados (gratis, sin clave)."""
+"""YouTube videos for the panel widget: search by reading the results page (free, no key)."""
 
 import json
 import logging
@@ -14,7 +14,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 DATA = re.compile(r"var ytInitialData = (\{.*?\});</script>", re.S)
 _cache: dict[str, tuple[float, list]] = {}
 
-# «pon en youtube X», «ponme un vídeo de X», «busca en youtube X»
+# Spanish voice commands: "pon en youtube X", "ponme un vídeo de X", "busca en youtube X"
 PLAY_RE = re.compile(r"^(?:pon(?:me)?|busca(?:me)?|ens[eé][ñn]ame|quiero ver)\s+(?:en\s+youtube\s+|un\s+v[ií]deo\s+(?:de|del|sobre)\s+"
                      r"|el\s+v[ií]deo\s+(?:de|del)\s+)(.+?)(?:\s+en\s+youtube)?[.!?]*$", re.I)
 CLOSE_RE = re.compile(r"\b(quita|cierra|apaga)\b.{0,10}\bv[ií]deo\b", re.I)
@@ -44,7 +44,7 @@ def _text(node: dict | None) -> str:
 
 
 def search(query: str, limit: int = 12) -> list[dict]:
-    """[{id, title, channel, length, thumb}]. Lanza RuntimeError con un mensaje en español si no se puede."""
+    """[{id, title, channel, length, thumb}]. Raises RuntimeError with a message if it cannot."""
     query = query.strip()
     if not query:
         return []
@@ -57,13 +57,13 @@ def search(query: str, limit: int = 12) -> list[dict]:
         r.raise_for_status()
     except httpx.HTTPError as e:
         log.warning("YouTube: %s", e)
-        raise RuntimeError("No pude buscar en YouTube: sin conexión o no responde") from e
+        raise RuntimeError("Could not search YouTube: no connection or no response") from e
     m = DATA.search(r.text)
     if not m:
-        raise RuntimeError("YouTube ha cambiado su página y no entiendo los resultados")
+        raise RuntimeError("YouTube changed its page and I cannot read the results")
     out = []
     for v in _walk(json.loads(m.group(1))):
-        if not v.get("videoId") or not v.get("lengthText"):   # sin duración: directos y cosas raras
+        if not v.get("videoId") or not v.get("lengthText"):   # no duration: live streams and odd items
             continue
         out.append({"id": v["videoId"], "title": _text(v.get("title")), "channel": _text(v.get("ownerText")),
                     "length": _text(v.get("lengthText")),

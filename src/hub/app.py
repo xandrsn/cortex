@@ -1,4 +1,4 @@
-"""Servidor local y orquestador: oído → transcripción → router/Claude → voz."""
+"""Local server and orchestrator: hearing → transcription → router/Claude → voice."""
 
 import asyncio
 import json
@@ -27,7 +27,7 @@ from .brain import one_shot
 from .brain import Brain, BrainError, claude_login, claude_status
 from .config import MODELS_DIR, ROOT, WEB_DIR, settings
 
-WHO = settings["user_name"] or "el usuario"   # nombre configurable en config.yaml (user_name)
+WHO = settings["user_name"] or "the user"   # configurable name in config.yaml (user_name)
 from .listener import BargeIn, Listener, find_wake
 from .router import is_ack, route
 from .spotify import LIKED, Spotify, SpotifyError, norm
@@ -37,7 +37,7 @@ from .sense_link import SenseLink
 log = logging.getLogger("hub")
 
 EDGE_VOICES = {
-    # las multilingües son la generación nueva (más naturales) y hablan español; Andrew se descarta: lento y corta frases
+    # the multilingual ones are the newer generation (more natural) and speak Spanish; Andrew is dropped: slow and cuts sentences off
     "es": ["en-US-BrianMultilingualNeural", "en-US-EmmaMultilingualNeural", "es-ES-XimenaNeural", "es-ES-ElviraNeural",
            "es-ES-AlvaroNeural", "es-MX-DaliaNeural", "es-MX-JorgeNeural", "en-US-AvaMultilingualNeural"],
     "en": ["en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural", "en-US-BrianMultilingualNeural",
@@ -50,12 +50,12 @@ FILLERS = {
     "en": ["Give me a sec, I'll look it up.", "Hang on, let me check."],
 }
 MUSIC_TAG = re.compile(r"\[\[\s*m[uú]sica\s*:\s*(.+?)\]\]", re.I | re.S)
-ANY_TAG = re.compile(r"\[\[.*?\]\]", re.S)   # etiquetas para el sistema: nunca se leen ni se ven
+ANY_TAG = re.compile(r"\[\[.*?\]\]", re.S)   # system tags: never read aloud or shown
 SENTENCE_END = re.compile(r"(.+?[.!?…:;](?=\s)|.+?\n)", re.S)
 LAYOUT_FILE = ROOT / "layout.json"
 
 
-# el detector salta antes de que acabe la palabra: «…tex, pon música» o «Cortex, pon música» → «pon música»
+# the detector fires before the word ends: «…tex, pon música» or «Cortex, pon música» → «pon música»
 WAKE_TAIL = re.compile(r"^\s*(?:[ck][oó]r)?te(?:x|[ck]s)\b[\s,.;:!?]*", re.I)
 
 
@@ -66,14 +66,14 @@ def strip_wake(text: str) -> str:
     return WAKE_TAIL.sub("", text, count=1).strip()
 
 
-# «añade leche y huevos a la lista (de la compra)» · «qué hay en la lista de la compra»
+# «añade leche y huevos a la lista (de la compra)» (add to shopping list) · «qué hay en la lista de la compra» (read it)
 COMPRA_ADD_RE = re.compile(r"^(?:a[ñn]ade|apunta|pon|mete|agrega)\s+(.+?)\s+(?:a|en)\s+la\s+lista(?:\s+de\s+la\s+compra)?[.!]*$",
                            re.I)
 COMPRA_LIST_RE = re.compile(r"(qu[eé] (hay|tengo|falta) en|l[eé]eme|dime) la lista de la compra|qu[eé] (tengo|hay) que comprar",
                             re.I)
 
 
-# su propia voz: «habla más despacio», «cambia de voz», «pon la voz de Elvira», «voz de mujer»
+# its own voice: «habla más despacio», «cambia de voz», «pon la voz de Elvira», «voz de mujer» (slower, change voice, a named voice, female voice)
 VOICE_NAMES = {"alvaro": "es-ES-AlvaroNeural", "elvira": "es-ES-ElviraNeural", "ximena": "es-ES-XimenaNeural",
                "dalia": "es-MX-DaliaNeural", "jorge": "es-MX-JorgeNeural",
                "brian": "en-US-BrianMultilingualNeural", "emma": "en-US-EmmaMultilingualNeural",
@@ -89,21 +89,21 @@ NORMAL_RATE_RE = re.compile(r"velocidad normal|habla (a velocidad )?normal", re.
 VOICE_RE = re.compile(r"\b(?:cambia(?:te)?|pon(?:te)?|usa)\b.{0,15}\bvoz\b(?:.{0,12}?\b(?P<name>" + "|".join(VOICE_NAMES)
                       + r")\b)?",
                       re.I)
-# [[ver: URL]] o [[ver: servicio | búsqueda]] (esta la resuelve video_sites con la API de la web)
+# [[ver: URL]] or [[ver: service | search]] (the latter is resolved by video_sites using the site's API)
 WATCH_TAG = re.compile(r"\[\[\s*ver\s*:\s*(.+?)\s*\]\]", re.I)
-# sin Claude: «pon el último telediario de RTVE», «pon La Revuelta de anoche en RTVE», «pon la 1», «pon antena 3 en directo»
+# without Claude: «pon el último telediario de RTVE», «pon La Revuelta de anoche en RTVE», «pon la 1», «pon antena 3 en directo»
 WATCH_SITE_RE = re.compile(r"^(?:pon(?:me)?|quiero ver|echa|reproduce)\s+(?P<q>.+?)\s+(?:en|de)\s+"
                            r"(?P<s>rtve(?: play)?|pluto(?: tv)?|atres ?player)\s*[.!?]*$", re.I)
 WATCH_LIVE_RE = re.compile(r"^(?:pon(?:me)?|quiero ver)\s+(?:el canal\s+)?(?P<q>la ?[12]|(?:el )?(?:canal )?24 horas|clan|"
                            r"teledeporte|antena ?3|la ?sexta|neox|nova|mega|atreseries)(?:\s+en directo)?\s*[.!?]*$", re.I)
-# «pon la última de La Revuelta en RTVE», «quiero ver Stranger Things»… → a Claude se le pasan los servicios activos
+# «pon la última de La Revuelta en RTVE», «quiero ver Stranger Things»… → Claude is given the active services
 WATCH_RE = re.compile(r"\b(ver|pon(me)?|reproduce|echa)\b.*\b(serie|peli|pel[ií]cula|cap[ií]tulo|episodio|temporada|"
                       r"documental|programa|directo|canal|telediario|la 1|la 2|netflix|prime|rtve|pluto|disney|"
                       r"atres|movistar)", re.I)
-# [[guardar_web: nombre | URL]] (sin URL: la web abierta ahora en la ventana de vídeos)
+# [[guardar_web: name | URL]] (without a URL: the site currently open in the video window)
 SAVE_WEB_TAG = re.compile(r"\[\[\s*guardar[ _]web\s*:\s*(.+?)\]\]", re.I)
 VOICE_TAG = re.compile(r"\[\[\s*voz\s*:\s*(.+?)\]\]", re.I)
-# correo: [[correo: para | asunto | texto | cuenta?]] y [[responder: ID | texto]] (ID como p123 / s45)
+# mail: [[correo: to | subject | text | account?]] and [[responder: ID | text]] (ID like p123 / s45)
 MAIL_SEND_TAG = re.compile(r"\[\[\s*correo\s*:\s*(.+?)\]\]", re.I | re.S)
 MAIL_REPLY_TAG = re.compile(r"\[\[\s*responder\s*:\s*([ps]\d+)\s*\|\s*(.+?)\]\]", re.I | re.S)
 MAIL_ID_RE = re.compile(r"\b([ps]\d{1,9})\b")
@@ -111,7 +111,7 @@ RATE_TAG = re.compile(r"\[\[\s*velocidad\s*:\s*([+-]?\d+)\s*%?\s*\]\]", re.I)
 
 
 def set_voice(name: str | None) -> str:
-    """Cambia la voz en español (sin nombre: la siguiente de la lista). Devuelve el nombre corto."""
+    """Change the Spanish voice (no name: the next one in the list). Returns the short name."""
     name = norm(name or "")
     if name in VOICE_NAMES:
         voice = VOICE_NAMES[name]
@@ -120,7 +120,7 @@ def set_voice(name: str | None) -> str:
         cur = settings["voice_es"]
         voice = order[(order.index(cur) + 1) % len(order)] if cur in order else order[0]
     settings.update({"voice_es": voice, "tts_engine": "edge"})
-    log.info("Voz cambiada a %s", voice)
+    log.info("Voice changed to %s", voice)
     return voice_label(voice)
 
 
@@ -132,89 +132,89 @@ def voice_label(voice: str) -> str:
 def set_rate(rate: int) -> int:
     rate = max(-30, min(60, int(rate)))
     settings.update({"tts_rate": rate})
-    log.info("Velocidad de voz: %+d%%", rate)
+    log.info("Speech rate: %+d%%", rate)
     return rate
 
 
 def local_tools(text: str) -> str | None:
-    """Temporizadores, lista de la compra y su propia voz: se resuelven al momento, sin pasar por Claude."""
+    """Timers, shopping list and its own voice: resolved instantly, without going through Claude."""
     t = text.strip()
     if QUIET_ON_RE.search(t):
         settings.update({"quiet_mode": True})
-        return "Vale, modo silencio: los avisos solo saldrán en el panel."
+        return "Okay, quiet mode: notices will only show in the panel."
     if QUIET_OFF_RE.search(t):
         settings.update({"quiet_mode": False})
-        return "Vale, ya te aviso en voz alta."
+        return "Okay, I'll announce notices out loud again."
     if FASTER_RE.search(t):
         set_rate(settings["tts_rate"] + 15)
-        return "Vale, hablo más rápido."
+        return "Okay, speaking faster."
     if SLOWER_RE.search(t):
         set_rate(settings["tts_rate"] - 15)
-        return "Vale, hablo más despacio."
+        return "Okay, speaking slower."
     if NORMAL_RATE_RE.search(t):
         set_rate(15)
-        return "Vale, a velocidad normal."
-    m = VOICE_RE.search(norm(t))   # sin tildes: «Álvaro», «cámbiate»
+        return "Okay, back to normal speed."
+    m = VOICE_RE.search(norm(t))   # accent-free: «Álvaro», «cámbiate»
     if m:
-        return f"Hola, ahora soy {set_voice(m.group("name"))}. ¿Qué tal sueno?"
+        return f"Hi, I'm {set_voice(m.group("name"))} now. How do I sound?"
     if timers.CANCEL_RE.search(t):
         n = timers.cancel()
-        return "Temporizador quitado." if n == 1 else f"Quitados {n} temporizadores." if n else "No había ninguno."
+        return "Timer removed." if n == 1 else f"Removed {n} timers." if n else "There were none."
     if timers.LEFT_RE.search(t):
         act = timers.active()
         if not act:
-            return "No hay ningún temporizador."
-        return ". ".join(f"{'Al de ' + a['label'] if a['label'] else 'Le'} quedan "
-                         f"{timers.say_duration(a['end'] - time.time())}" for a in act) + "."
+            return "There are no timers."
+        return ". ".join(f"{a['label'] + ' has' if a['label'] else 'It has'} "
+                         f"{timers.say_duration(a['end'] - time.time())} left" for a in act) + "."
     parsed = timers.parse(t)
     if parsed:
         seconds, label = parsed
         timers.add(seconds, label)
-        return f"Vale, {timers.say_duration(seconds)}" + (f" para {label}." if label else ".")
+        return f"Okay, {timers.say_duration(seconds)}" + (f" for {label}." if label else ".")
     m = COMPRA_ADD_RE.match(t.rstrip())
     if m:
         compra.add(m.group(1))
-        return "Apuntado."
+        return "Added."
     if COMPRA_LIST_RE.search(t):
         pending = [i["text"] for i in compra.items() if not i["done"]]
-        return ("En la lista: " + ", ".join(pending) + ".") if pending else "La lista está vacía."
+        return ("On the list: " + ", ".join(pending) + ".") if pending else "The list is empty."
     return None
 
 
-# preguntas sobre la cuenta del banco: se le pasan a Claude los datos de Revolut (solo lectura)
-MORNING_RE = re.compile(r"resumen (matinal|de la ma[ñn]ana|del d[ií]a)|buenos d[ií]as,? cortex", re.I)
+# questions about the bank account: Claude is given the Revolut data (read-only)
+MORNING_RE = re.compile(r"resumen (matinal|de la ma[ñn]ana|del d[ií]a)|buenos d[ií]as,? cortex|morning (summary|briefing)|good morning,? cortex", re.I)
 BANK_RE = re.compile(r"revolut|saldo|movimientos|en el banco|en la cuenta|he gastado|mis gastos|presupuesto|"
                      r"c[oó]mo voy (de|con el) dinero|deber[ií]a tener",
                      re.I)
 BANK_FRESH_RE = re.compile(r"actualiza|ahora mismo|en (este momento|vivo)|refresca", re.I)
 
 
-# preguntas sobre los gestos: se le pasa a Claude la tabla real (la que hay configurada ahora)
+# questions about gestures: Claude is given the real table (the one configured right now)
 GESTURE_RE = re.compile(r"\bgestos?\b|con la mano|con las manos|la c[aá]mara|\bse[ñn]as\b|qu[eé] hago para", re.I)
 GESTURE_NAMES = {
-    "swipe_left": "deslizar la mano a la izquierda", "swipe_right": "deslizar la mano a la derecha",
-    "swipe_up": "deslizar hacia arriba", "swipe_down": "deslizar hacia abajo",
-    "open_palm": "mano abierta", "closed_fist": "puño", "thumb_up": "pulgar arriba", "thumb_down": "pulgar abajo",
-    "victory": "uve (dos dedos)", "pointing_up": "índice arriba", "i_love_you": "cuernos con pulgar",
-    "ok": "OK (pulgar e índice en círculo)", "shaka": "shaka (pulgar y meñique)", "rock": "cuernos (índice y meñique)",
-    "three": "tres dedos", "shush": "silencio (índice en los labios)",
-    "flick_right": "toque de índice a la derecha", "flick_left": "toque de índice a la izquierda",
-    "circle_cw": "círculo con el dedo (horario)", "circle_ccw": "círculo con el dedo (antihorario)",
-    "wag": "dedo que dice «no»", "wave": "saludar con la mano", "push": "empujar hacia la cámara",
-    "both_palms": "dos manos abiertas", "both_thumbs_up": "dos pulgares arriba", "both_thumbs_down": "dos pulgares abajo",
-    "both_fists": "dos puños", "hands_apart": "separar las manos", "hands_together": "juntar las manos",
+    "swipe_left": "swipe hand left", "swipe_right": "swipe hand right",
+    "swipe_up": "swipe up", "swipe_down": "swipe down",
+    "open_palm": "open palm", "closed_fist": "closed fist", "thumb_up": "thumb up", "thumb_down": "thumb down",
+    "victory": "victory (two fingers)", "pointing_up": "index finger up", "i_love_you": "horns with thumb",
+    "ok": "OK (thumb and index in a circle)", "shaka": "shaka (thumb and pinky)", "rock": "horns (index and pinky)",
+    "three": "three fingers", "shush": "shush (index finger on the lips)",
+    "flick_right": "index flick to the right", "flick_left": "index flick to the left",
+    "circle_cw": "finger circle (clockwise)", "circle_ccw": "finger circle (counter-clockwise)",
+    "wag": "finger wag (\"no\")", "wave": "wave hello", "push": "push toward the camera",
+    "both_palms": "two open palms", "both_thumbs_up": "two thumbs up", "both_thumbs_down": "two thumbs down",
+    "both_fists": "two fists", "hands_apart": "hands apart", "hands_together": "hands together",
 }
 ACTION_NAMES = {
-    "next": "siguiente canción", "previous": "canción anterior", "toggle": "pausar / seguir la música",
-    "volume_up": "subir volumen", "volume_down": "bajar volumen", "listen": "ponerse a escuchar (como decir «Cortex»)",
-    "stop": "cortar al asistente (para todo)", "quiet": "callar al asistente (deja de hablar pero sigue con la tarea)",
-    "ambient": "modo reposo", "wake_toggle": "pausar/activar la palabra «Cortex»",
-    "new_chat": "conversación nueva", "theme": "cambiar tema claro/oscuro",
+    "next": "next song", "previous": "previous song", "toggle": "pause / resume the music",
+    "volume_up": "volume up", "volume_down": "volume down", "listen": "start listening (like saying «Cortex»)",
+    "stop": "stop the assistant (halts everything)", "quiet": "mute the assistant (stops talking but carries on with the task)",
+    "ambient": "idle mode", "wake_toggle": "pause/enable the «Cortex» wake word",
+    "new_chat": "new conversation", "theme": "switch light/dark theme",
 }
 
 
 def site_url(service: str) -> str | None:
-    """«cuevana.biz», «https://x.tv/…» o el nombre de un servicio de Ajustes → la URL de su portada."""
+    """«cuevana.biz», «https://x.tv/…» or the name of a service in Settings → the URL of its home page."""
     s = service.strip().strip("/")
     for v in settings["video_services"]:
         if v["name"].lower() == s.lower():
@@ -225,12 +225,12 @@ def site_url(service: str) -> str | None:
 
 
 def save_web(name: str, url: str | None, web) -> str:
-    """Guarda una web como servicio de vídeo con ese nombre (Ajustes → Vídeo): luego «busca X en <nombre>»."""
+    """Save a website as a video service under that name (Settings → Video), so «busca X en <name>» works later."""
     if not url:
         page = web._page()
         url = page.get("url") if page else None
         if not url or not url.startswith("http"):
-            return "No hay ninguna web abierta para guardar."
+            return "There is no open website to save."
     url = site_url(url) or url
     p = urlparse(url)
     root = f"{p.scheme}://{p.netloc}/"
@@ -238,46 +238,47 @@ def save_web(name: str, url: str | None, web) -> str:
     services = [v for v in settings["video_services"] if v["name"].lower() != name.lower()]
     services.append({"name": name, "url": root, "domains": [domain], "enabled": True})
     settings.update({"video_services": services})
-    log.info("Web guardada: %s → %s", name, root)
-    return f"Guardada «{name}» ({domain})."
+    log.info("Website saved: %s → %s", name, root)
+    return f"Saved «{name}» ({domain})."
 
 
 def watch_context() -> str:
     on = [s for s in settings["video_services"] if s.get("enabled", True)]
-    return ("[Servicios de vídeo activados (dato del sistema): " + "; ".join(f"{s['name']} ({', '.join(s['domains'])})"
-            for s in on) + ". Para poner algo escribe al final [[ver: servicio | qué]] (p. ej. [[ver: RTVE | último "
-            "telediario]], [[ver: RTVE | La Revuelta de anoche]], [[ver: RTVE | La 1 en directo]], [[ver: Pluto TV | canal "
-            "de películas de acción]], [[ver: Atresplayer | El Hormiguero de anoche]]): Cortex lo busca en la propia web, "
-            "lo abre y le da al play. Solo si tienes la URL exacta de la página del vídeo usa [[ver: URL]]; no pongas la "
-            "portada. Los directos de RTVE piden cuenta; canales temáticos sin cuenta: Pluto TV. Netflix, Prime Video y "
-            "Disney+: busca el título y pone el primer resultado. Cualquier otra web de vídeo también vale: "
-            "[[ver: dominio.com | qué]] (p. ej. [[ver: dailymotion.com | resumen del Betis]]) busca en esa web, quita "
-            f"anuncios y ventanas emergentes y pone el primer resultado; si {WHO} no dice la dirección y no la sabes "
-            "seguro, pregúntasela.]")
+    return ("[Enabled video services (system data): " + "; ".join(f"{s['name']} ({', '.join(s['domains'])})"
+            for s in on) + ". To play something, write at the end [[ver: service | what]] (e.g. [[ver: RTVE | latest "
+            "news bulletin]], [[ver: RTVE | La Revuelta from last night]], [[ver: RTVE | La 1 live]], [[ver: Pluto TV | "
+            "action movie channel]], [[ver: Atresplayer | El Hormiguero from last night]]): Cortex searches the site "
+            "itself, opens it and presses play. Use [[ver: URL]] only if you have the exact URL of the video page; "
+            "never give the home page. RTVE live streams require an account; themed channels without one: Pluto TV. "
+            "Netflix, Prime Video and Disney+: it searches the title and plays the first result. Any other video "
+            "site works too: [[ver: domain.com | what]] (e.g. [[ver: dailymotion.com | Betis highlights]]) searches "
+            f"that site, removes ads and pop-ups and plays the first result; if {WHO} does not give the address and "
+            "you are not sure of it, ask them.]")
 
 
 UPDATE_PROMPT = (
-    "Actualización automática (nadie espera respuesta en voz). 1) Busca con WebSearch los próximos partidos del Real "
-    "Betis (fecha, hora, rival, competición) y corrige betis.yaml solo si algo ha cambiado o falta. 2) Mira tareas.yaml "
-    "sin cambiar nada y fíjate en lo que vence hoy o mañana. No toques otros archivos. Contesta SOLO con las novedades "
-    f"importantes para {WHO}, cada una en una línea que empiece por '- ' (máximo 3, muy cortas), o exactamente NADA.")
+    "Automatic update (nobody is waiting for a spoken answer). 1) Use WebSearch to find Real Betis's upcoming "
+    "matches (date, time, opponent, competition) and fix betis.yaml only if something has changed or is missing. "
+    "2) Read tareas.yaml without changing anything and note what is due today or tomorrow. Do not touch other files. "
+    f"Reply ONLY with the important news for {WHO}, each on a line starting with '- ' (max 3, very short), or exactly "
+    "NOTHING. Write in the user's language (default English).")
 STATE_FILE = ROOT / "logs" / "auto_update.json"
-YES_RE = __import__("re").compile(r"^(s[ií]|vale|venga|dale|claro|porfa|por favor|res[uú]melo|l[eé]emelo|ok|okey)\b", 2)
+YES_RE = __import__("re").compile(r"^(s[ií]|yes|yeah|sure|please|vale|venga|dale|claro|porfa|por favor|res[uú]melo|l[eé]emelo|ok|okey)\b", 2)
 
 
 def claude_usage(plan: dict) -> dict:
-    """Lo que queda del plan de Claude (ventana de 5 h), del último aviso de límites que manda el propio claude."""
+    """What is left of the Claude plan (5 h window), from the latest limits notice that claude itself sends."""
     win = ((plan or {}).get("unifiedWindows") or {}).get("five_hour") or {}
     if "utilization" not in win:
         return {}
     resets = datetime.fromtimestamp(win["resetsAt"]).strftime("%H:%M") if win.get("resetsAt") else ""
     week = ((plan.get("unifiedWindows") or {}).get("seven_day") or {}).get("utilization")
-    return {"left": max(0.0, 100 - win["utilization"] * 100), "resets": f"a las {resets}" if resets else "",
+    return {"left": max(0.0, 100 - win["utilization"] * 100), "resets": f"at {resets}" if resets else "",
             "week_left": None if week is None else max(0.0, 100 - week * 100)}
 
 
 def web_version() -> int:
-    """Cambia cuando se toca el panel (html/js/css): el panel abierto se recarga solo."""
+    """Changes when the panel (html/js/css) is touched: the open panel reloads itself."""
     return int(max(p.stat().st_mtime for p in WEB_DIR.iterdir() if p.is_file()))
 
 
@@ -286,42 +287,42 @@ def gesture_context(vision: "SenseLink | None") -> str:
     used = [f"- {GESTURE_NAMES.get(g, g)} → {ACTION_NAMES.get(a, a)}" for g, a in actions.items() if a and a != "none"]
     free = [GESTURE_NAMES.get(g, g) for g, a in actions.items() if not a or a == "none"]
     custom = vision.list_custom() if vision else []
-    lines = [f"[Gestos configurados ahora mismo (dato del sistema, no lo dice {WHO}):"] + used
+    lines = [f"[Gestures configured right now (system data, not said by {WHO}):"] + used
     for c in custom:
         a = actions.get(c["id"], "none")
-        lines.append(f"- gesto propio «{c['name']}» → {ACTION_NAMES.get(a, 'nada')}")
-    lines.append(f"- Libres (sin acción): {', '.join(free)}")
-    lines.append("- Cortex Sense (la app de los gestos) " + ("conectada" if vision and vision.connected else "apagada")
-                 + (". Solo cuentan mirando a la pantalla" if settings["gestures_require_look"] else "")
-                 + ". Para cambiarlos o grabar uno propio: en el panel, Ajustes (la rueda, arriba a la derecha) → pestaña "
-                 "Gestos, o el panel de Cortex Sense (http://127.0.0.1:8766), que además calibra la cámara y asigna "
-                 "teclas, programas y ventanas. Tú no puedes cambiarlos.]")
+        lines.append(f"- custom gesture «{c['name']}» → {ACTION_NAMES.get(a, 'nothing')}")
+    lines.append(f"- Free (no action): {', '.join(free)}")
+    lines.append("- Cortex Sense (the gesture app) " + ("connected" if vision and vision.connected else "off")
+                 + (". They only count when looking at the screen" if settings["gestures_require_look"] else "")
+                 + ". To change them or record a custom one: in the panel, Settings (the gear, top right) → Gestures "
+                 "tab, or the Cortex Sense panel (http://127.0.0.1:8766), which also calibrates the camera and assigns "
+                 "keys, programs and windows. You cannot change them yourself.]")
     return "\n".join(lines)
 
 
 def bank_context(text: str) -> str:
-    """Bloque con saldo y últimos movimientos para añadir a la pregunta (vacío si no hay banco conectado)."""
+    """Block with the balance and latest transactions to append to the question (empty if no bank is connected)."""
     data = bank.summary(force=bool(BANK_FRESH_RE.search(text)))
     if not data.get("ok") and not data.get("accounts"):
         return ""
     when = datetime.fromtimestamp(data.get("fetched_at", time.time())).strftime("%d/%m %H:%M")
-    lines = [f"[Datos de Revolut (solo lectura), consultados el {when}"
-             + (", puede que no estén al día" if data.get("stale") else "") + ":"]
+    lines = [f"[Revolut data (read-only), fetched on {when}"
+             + (", may be out of date" if data.get("stale") else "") + ":"]
     for a in data.get("accounts", []):
         b = a.get("balance") or {}
-        lines.append(f"- Cuenta {a.get('masked')}: saldo {b.get('amount')} {b.get('currency')}")
+        lines.append(f"- Account {a.get('masked')}: balance {b.get('amount')} {b.get('currency')}")
         for t in a.get("transactions", [])[:10]:
             lines.append(f"  {t['date']}  {t['amount']:+.2f} {t['currency']}  {t['description']}"
-                         + (" (pendiente)" if t.get("pending") else ""))
+                         + (" (pending)" if t.get("pending") else ""))
     for a in data.get("accounts", []):
         sp = a.get("spending") or {}
         if sp:
             cats = ", ".join(f"{k} {v:.0f} €" for k, v in sp.get("categorias", [])[:6])
-            lines.append(f"- Gasto con tarjeta este mes ({sp['mes']}, día {sp['dia']} de {sp['dias_mes']}): "
-                         f"{sp['gastado']:.0f} € ({sp['media_diaria']:.0f} €/día, a este ritmo {sp['proyeccion']:.0f} € "
-                         f"a fin de mes; el mes pasado {sp['mes_anterior']:.0f} €). Por categorías: {cats}")
+            lines.append(f"- Card spending this month ({sp['mes']}, day {sp['dia']} of {sp['dias_mes']}): "
+                         f"{sp['gastado']:.0f} € ({sp['media_diaria']:.0f} €/day, at this rate {sp['proyeccion']:.0f} € "
+                         f"by month end; last month {sp['mes_anterior']:.0f} €). By category: {cats}")
     if data.get("consent_days") is not None:
-        lines.append(f"- El permiso del banco caduca en {data['consent_days']} días]")
+        lines.append(f"- The bank consent expires in {data['consent_days']} days]")
     else:
         lines[-1] += "]"
     return "\n".join(lines)
@@ -348,41 +349,41 @@ class Assistant:
         self.devices: Devices | None = None
         self.mail = Mail()
         self.wa = WhatsApp()
-        self._offer: tuple[float, str] | None = None   # «¿quieres que te lo resuma?»: (momento, lo que se haría)
+        self._offer: tuple[float, str] | None = None   # «do you want a summary?»: (time, what would be done)
         self.notices: list[dict] = []
         self._notice_lock = asyncio.Lock()
         self._video_status: dict = {"playing": False}
         self.history: list[dict] = []
         self._turn: asyncio.Task | None = None
         self._sentences: asyncio.Queue = asyncio.Queue()
-        self._speak_lang = "es"
+        self._speak_lang = "en"
         self._muted_until = 0.0
         self._outputs: str | None = None
         self._pending = ""
-        self._raw = ""        # texto de Claude tal cual, con las etiquetas [[musica: …]]
-        self._shown = ""      # lo que ya se ha mostrado/hablado (sin etiquetas)
-        self._spoke = False   # ¿ya ha dicho algo en este turno?
-        self._turn_t = 0.0    # cuándo empezó el turno (0 = ya ha hablado)
-        self._gen = 0         # cada turno tiene su número: el audio de un turno interrumpido se descarta
-        self._quiet_gen = -1   # turno al que se ha mandado callar (gesto de silencio): sigue, pero sin voz
-        self._enroll_left = 0  # muestras de «Cortex» que faltan por grabar
+        self._raw = ""        # Claude's text as is, with the [[musica: …]] tags
+        self._shown = ""      # what has already been shown/spoken (without tags)
+        self._spoke = False   # has it already said something this turn?
+        self._turn_t = 0.0    # when the turn started (0 = already spoke)
+        self._gen = 0         # each turn has a number: audio from an interrupted turn is discarded
+        self._quiet_gen = -1   # turn that was told to be quiet (shush gesture): it continues, but silently
+        self._enroll_left = 0  # «Cortex» samples still to record
         self.mic_mute = audio.WindowsMicMute()
         self.spotify = Spotify(settings["ui_port"])
         self._duck_lock = asyncio.Lock()
-        self._no_duck = False   # durante una orden de música no se baja el volumen
-        self._followup = False  # ¿la escucha actual es la de después de responder?
+        self._no_duck = False   # during a music command the volume is not ducked
+        self._followup = False  # is the current listening the one after a reply?
         self._tasks: set[asyncio.Task] = set()
 
-    # ---------- arranque ----------
+    # ---------- startup ----------
     async def start(self):
         self.loop = asyncio.get_running_loop()
         self.loop.set_exception_handler(_quiet_resets)
         keep_awake()
-        timers.load()   # los temporizadores sobreviven a un reinicio
+        timers.load()   # timers survive a restart
         self.devices = Devices()
         self.open_devices()
         self.spawn(self._start_brain())
-        self.spawn(self._start_ears())   # en segundo plano: la primera vez descarga el modelo y el panel no espera
+        self.spawn(self._start_ears())   # in the background: the first time it downloads the model and the panel does not wait
         self.spawn(asyncio.to_thread(tts.preload_piper))
         self.vision = SenseLink(settings["sense_url"], on_gesture=self._threadsafe(self._on_gesture),
                                 on_presence=self._threadsafe(self._on_presence))
@@ -391,14 +392,14 @@ class Assistant:
         self.wa.start()
         self.spawn(self._speaker())
         self.spawn(self._monitor())
-        log.info("Cortex listo")
+        log.info("Cortex ready")
 
     async def _start_brain(self):
-        try:   # sin carpeta de datos, sin Claude Code instalado…: el panel arranca igual y se arregla desde él
+        try:   # no data folder, Claude Code not installed…: the panel starts anyway and it can be fixed from there
             datos.folder().mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(self.brain.start)
         except (OSError, BrainError) as e:
-            log.warning("Claude no arranca: %s", e)
+            log.warning("Claude does not start: %s", e)
 
     async def _start_ears(self):
         try:
@@ -408,9 +409,9 @@ class Assistant:
                 self._threadsafe(self._on_command), self._threadsafe(self._on_timeout))
             self.barge = BargeIn(self.mic, self.stt, self._threadsafe(self._on_barge))
         except Exception:
-            log.exception("No pude cargar el reconocimiento de voz")
-            await self.broadcast({"type": "error", "text": "No pude cargar el reconocimiento de voz. ¿Hay internet? "
-                                  "Reinicia Cortex para reintentarlo; por texto funciona."})
+            log.exception("Could not load speech recognition")
+            await self.broadcast({"type": "error", "text": "Could not load speech recognition. Is there an internet connection? "
+                                  "Restart Cortex to retry; text input still works."})
         await self.broadcast(self.status())
 
     def open_devices(self):
@@ -421,18 +422,18 @@ class Assistant:
             try:
                 dev.open(settings[key])
             except Exception as e:
-                log.error("No puedo abrir %s: %s", key, e)
+                log.error("Cannot open %s: %s", key, e)
                 dev.ok = False
 
     def _threadsafe(self, coro_fn):
-        """Para que los hilos (el oído) puedan lanzar corrutinas en el bucle principal."""
+        """So that threads (the hearing) can launch coroutines on the main loop."""
         def call(*args):
             self.loop.call_soon_threadsafe(lambda: self.spawn(coro_fn(*args)))
         return call
 
     def spawn(self, coro) -> asyncio.Task:
-        """Lanza una tarea suelta guardando la referencia (si no, el recolector puede llevársela a medias) y
-        dejando sus errores en el registro (si no, solo salen como «Task exception was never retrieved»)."""
+        """Launch a fire-and-forget task keeping a reference (otherwise the garbage collector may drop it midway) and
+        logging its errors (otherwise they only show up as «Task exception was never retrieved»)."""
         task = asyncio.ensure_future(coro)
         self._tasks.add(task)
         task.add_done_callback(self._task_done)
@@ -441,13 +442,13 @@ class Assistant:
     def _task_done(self, task: asyncio.Task):
         self._tasks.discard(task)
         if not task.cancelled() and task.exception() is not None:
-            log.error("Error en una tarea de fondo", exc_info=task.exception())
+            log.error("Error in a background task", exc_info=task.exception())
 
-    # ---------- comunicación con el panel ----------
+    # ---------- communication with the panel ----------
     async def broadcast(self, msg: dict):
         for ws in list(self.clients):
             try:
-                # con límite: un panel colgado que no lee no puede parar el bucle de vigilancia (y el micro)
+                # with a timeout: a hung panel that does not read cannot stall the monitor loop (and the mic)
                 await asyncio.wait_for(ws.send_json(msg), 5)
             except Exception:
                 if ws in self.clients:
@@ -455,7 +456,7 @@ class Assistant:
                     self.spawn(self._drop(ws))
 
     async def _drop(self, ws: WebSocket):
-        """Cierra un panel que no responde: si sigue vivo, se reconecta solo."""
+        """Close a panel that does not respond: if it is still alive, it reconnects by itself."""
         try:
             await asyncio.wait_for(ws.close(), 3)
         except Exception:
@@ -480,7 +481,7 @@ class Assistant:
         if state != self.state:
             self.state = state
             if state in ("listening", "thinking"):
-                tts.warm()   # la conexión de la voz, lista para cuando toque contestar
+                tts.warm()   # the voice connection, ready for when it is time to answer
             if self.vision:
                 self.vision.yield_cpu = state == "transcribing"
             await self.broadcast({"type": "state", "state": state})
@@ -488,7 +489,7 @@ class Assistant:
                 self.spawn(self._duck(state != "idle" and not self._no_duck))
 
     async def _duck(self, down: bool):
-        """Baja la música mientras Cortex escucha o habla, y la devuelve al terminar."""
+        """Lower the music while Cortex listens or speaks, and restore it afterwards."""
         async with self._duck_lock:
             try:
                 if self.video.playing():
@@ -499,11 +500,11 @@ class Assistant:
             except SpotifyError:
                 pass
             except Exception:
-                log.exception("Error bajando la música")
+                log.exception("Error ducking the music")
 
-    # ---------- entradas ----------
+    # ---------- inputs ----------
     async def press(self):
-        """Botón del panel."""
+        """Panel button."""
         if self.state == "listening":
             self.listener.finish()
             return
@@ -515,14 +516,14 @@ class Assistant:
         self._start_turn(self._handle(text.strip(), guess_lang(text), "texto"))
 
     async def _video_command(self, text: str) -> str | None:
-        """«pon en youtube X» / «quita el vídeo» / «pausa el vídeo» / «adelanta 30 segundos»… (con mpv)."""
+        """«pon en youtube X» / «quita el vídeo» / «pausa el vídeo» / «adelanta 30 segundos»… (play on YouTube / close / pause / seek; via mpv)."""
         t = text.strip()
         player = await asyncio.to_thread(self._current_player)
         if player:
             m = youtube.SEEK_RE.search(t)
-            simple = {youtube.CLOSE_RE: ("stop", None, "Quitado."), youtube.PAUSE_RE: ("pause", None, "Pausado."),
-                      youtube.RESUME_RE: ("resume", None, "Sigo."), youtube.BIG_RE: ("fullscreen", 1, "Ahí lo tienes."),
-                      youtube.SMALL_RE: ("fullscreen", 0, "Vale.")}
+            simple = {youtube.CLOSE_RE: ("stop", None, "Removed."), youtube.PAUSE_RE: ("pause", None, "Paused."),
+                      youtube.RESUME_RE: ("resume", None, "Resuming."), youtube.BIG_RE: ("fullscreen", 1, "There you go."),
+                      youtube.SMALL_RE: ("fullscreen", 0, "Okay.")}
             for rx, (action, value, reply) in simple.items():
                 if rx.search(t):
                     await asyncio.to_thread(player.command, action, value)
@@ -533,8 +534,8 @@ class Assistant:
                 secs = n * (60 if (m.group(3) or "").lower().startswith("m") else 1)
                 back = m.group(1).lower() in ("atrasa", "retrocede", "rebobina")
                 await asyncio.to_thread(player.command, "seek", -secs if back else secs)
-                return "Hecho."
-        # webs de vídeo gratis con su propia búsqueda; si no encuentra nada, sigue Claude
+                return "Done."
+        # with their own search; if nothing is found, Claude takes over
         m = WATCH_SITE_RE.match(t) or WATCH_LIVE_RE.match(t)
         if m:
             service = m.groupdict().get("s") or m.group("q")
@@ -552,20 +553,20 @@ class Assistant:
         except RuntimeError as e:
             return str(e)
         if not results:
-            return "No he encontrado ningún vídeo."
+            return "I found no videos."
         await self.play_video(results[0]["id"], results[0]["title"])
         await self.broadcast({"type": "video_results", "results": results, "query": m.group(1)})
-        return f"Pongo «{results[0]['title']}»."
+        return f"Playing «{results[0]['title']}»."
 
     async def notify(self, text: str, offer: str | None = None, kind: str = "info"):
-        """Aviso que Charlie ha pedido (correo nuevo, novedades de la actualización). En silencio solo sale en el panel."""
+        """Notice the user asked for (new mail, update news). In quiet mode it only shows in the panel."""
         item = {"text": text, "kind": kind, "time": time.time()}
         self.notices = ([item] + self.notices)[:20]
         await self.broadcast({"type": "notice", **item})
-        log.info("Aviso (%s): %s", kind, text)
+        log.info("Notice (%s): %s", kind, text)
         if settings["quiet_mode"]:
             return
-        if self.state != "idle":   # está hablando o escuchando: se dice en cuanto acabe, no se pierde
+        if self.state != "idle":   # it is speaking or listening: say it as soon as it finishes, so it is not lost
             self.spawn(self._notify_later(text, offer))
             return
         await self._announce(text, offer)
@@ -580,13 +581,13 @@ class Assistant:
                     return
 
     async def _announce(self, text: str, offer: str | None):
-        async with self._notice_lock:   # varios avisos seguidos: uno detrás de otro
-            if self.state != "idle":       # mientras esperaba turno le ha hablado (o contesta al anterior)
+        async with self._notice_lock:   # several notices in a row: one after another
+            if self.state != "idle":       # while waiting for its turn the user spoke (or it is answering the previous one)
                 self.spawn(self._notify_later(text, offer))
                 return
             self._offer = (time.time(), offer) if offer else None
             self.player.play(audio.chime(self.player.rate), self.player.rate, mutes_mic=False)
-            self._speak_lang = "es"
+            self._speak_lang = settings["notice_language"]
             await self._say(text)
             await self._wait_speech()
             if offer:
@@ -596,24 +597,24 @@ class Assistant:
         new = await asyncio.to_thread(self.mail.check)
         await self.broadcast({"type": "mail", **self.mail.summary()})
         if len(new) >= 3:
-            # muchos de golpe (vuelta de suspensión, primera conexión): un solo aviso en vez de una retahíla
+            # many at once (back from suspend, first connection): a single notice instead of a string of them
             whos = list(dict.fromkeys(m["from"].split("<")[0].strip() or m["addr"] for m in new))
-            more = f" y {len(whos) - 3} más" if len(whos) > 3 else ""
-            self.spawn(self.notify(f"Tienes {len(new)} correos nuevos: de {', '.join(whos[:3])}{more}.", kind="mail"))
+            more = f" and {len(whos) - 3} more" if len(whos) > 3 else ""
+            self.spawn(self.notify(f"You have {len(new)} new emails: from {', '.join(whos[:3])}{more}.", kind="mail"))
             return
         for m in new:
             who = m["from"].split("<")[0].strip() or m["addr"]
-            where = "" if len(self.mail.accounts) < 2 else f" (a la {m['account']})"
-            # el aviso va aparte: la comprobación acaba ya y no se amontona con la siguiente mientras habla
-            self.spawn(self.notify(f"Nuevo correo de {who}{where}: {m['subject']}. ¿Quieres que te lo resuma?",
-                                   offer=f"Resúmeme en corto el correo {m['id']}.", kind="mail"))
+            where = "" if len(self.mail.accounts) < 2 else f" (to {m['account']})"
+            # the notice goes on its own: the check finishes now and does not pile up with the next one while it talks
+            self.spawn(self.notify(f"New email from {who}{where}: {m['subject']}. Want me to summarize it?",
+                                   offer=f"Give me a short summary of email {m['id']}.", kind="mail"))
 
     async def check_whatsapp(self):
-        """WhatsApp (solo lectura): refresca el panel y avisa de lo nuevo, salvo de los chats silenciados (grupos, por defecto)."""
+        """WhatsApp (read-only): refresh the panel and announce new messages, except from muted chats (groups, by default)."""
         new = await asyncio.to_thread(self.wa.check)
         await self.broadcast({"type": "whatsapp", **self.wa.summary()})
         media = [m for m in new if m["media"] in ("audio", "image", "sticker")]
-        if media:   # WhatsApp borra los audios y fotos de sus servidores a las ~2 semanas: se guardan ya
+        if media:   # WhatsApp deletes audio and photos from its servers after ~2 weeks: save them now
             self.spawn(self._keep_media(media))
         by_chat: dict[str, list[str]] = {}
         for m in new:
@@ -621,124 +622,125 @@ class Assistant:
                 by_chat.setdefault(m["chat"], []).append((f"{m['from']}: " if m["group"] else "") + m["text"])
         if len(by_chat) > 2:
             chats = list(by_chat)
-            more = f" y {len(chats) - 3} más" if len(chats) > 3 else ""
-            self.spawn(self.notify(f"Tienes WhatsApps nuevos de {', '.join(chats[:3])}{more}.", kind="whatsapp"))
+            more = f" and {len(chats) - 3} more" if len(chats) > 3 else ""
+            self.spawn(self.notify(f"You have new WhatsApp messages from {', '.join(chats[:3])}{more}.", kind="whatsapp"))
             return
         for chat, texts in by_chat.items():
             text = texts[-1] if len(texts[-1]) <= 140 else texts[-1][:137] + "…"
-            more = f" (y {len(texts) - 1} más)" if len(texts) > 1 else ""
-            self.spawn(self.notify(f"WhatsApp de {chat}{more}: {text}", kind="whatsapp"))
+            more = f" (and {len(texts) - 1} more)" if len(texts) > 1 else ""
+            self.spawn(self.notify(f"WhatsApp from {chat}{more}: {text}", kind="whatsapp"))
 
     async def _keep_media(self, media: list[dict]):
         for m in media:
             try:
                 await asyncio.to_thread(self.wa.media_file, m["jid"], m["id"])
             except Exception as e:
-                log.info("WhatsApp: no pude guardar el %s %s: %s", m["media"], m["id"], e)
+                log.info("WhatsApp: could not save %s %s: %s", m["media"], m["id"], e)
 
     async def _mail_action(self, fn, *args):
-        """Enviar o responder (Charlie no quiere confirmaciones): se hace y se avisa en el panel."""
+        """Send or reply (the user does not want confirmations): it is done and reported in the panel."""
         try:
             said = await asyncio.to_thread(fn, *args)
             await self.broadcast({"type": "notice", "text": "✉️ " + said})
             self.spawn(self.check_mail())
         except Exception as e:
-            log.warning("Correo: %s", e)
-            msg = f"No he podido enviar el correo: {e}"
+            log.warning("Mail: %s", e)
+            msg = f"I could not send the email: {e}"
             await self.broadcast({"type": "error", "text": msg})
             await self._say(msg)
 
     async def auto_update(self):
-        """Cada X horas: Claude repasa Betis y tareas (en una consulta aparte); se avisa solo si hay algo."""
+        """Every X hours: Claude reviews Betis and tasks (in a separate query); the user is notified only if there is news."""
         usage = claude_usage(self.brain.plan)
         if usage and usage["left"] < 25:
-            log.info("Actualización automática aplazada: queda poco plan de Claude (%.0f%%)", usage["left"])
+            log.info("Automatic update postponed: little Claude plan left (%.0f%%)", usage["left"])
             return False
         news = []
         w = await asyncio.to_thread(weather.forecast)
         today = (w.get("days") or [{}])[0] if w.get("ok") else {}
         if (today.get("rain") or 0) >= 60:
-            news.append(f"hoy puede llover en {w['place']} ({today['rain']}%)")
+            news.append(f"it may rain today in {w['place']} ({today['rain']}%)")
         try:
             out = await asyncio.to_thread(one_shot, UPDATE_PROMPT)
         except Exception as e:
-            # sin red o el portátil se suspendió a medias: no se marca como hecha, se reintenta en 10 min
-            log.warning("Actualización automática: %s", e)
+            # no network or the laptop suspended midway: it is not marked as done, retried in 10 min
+            log.warning("Automatic update: %s", e)
             return False
         news += [l[2:].strip() for l in out.splitlines() if l.startswith("- ")][:3]
-        log.info("Actualización automática: %s", news or "nada nuevo")
+        log.info("Automatic update: %s", news or "nothing new")
         STATE_FILE.write_text(json.dumps({"last_update": time.time()}), encoding="utf-8")
         if news:
-            await self.notify("Novedades: " + "; ".join(news) + ".", kind="update")
+            await self.notify("News: " + "; ".join(news) + ".", kind="update")
         return True
 
     async def morning_context(self) -> str:
-        """Lo que hace falta para el resumen matinal (botón 🌅 o «resumen matinal»); Claude decide qué contar."""
+        """What is needed for the morning summary (🌅 button or «resumen matinal»); Claude decides what to report."""
         now = datetime.now()
         parts = []
         if self.mail.configured:
             mails = await asyncio.to_thread(self.mail.recent, 12)
-            parts.append("Correos de las últimas 12 h: " + ("; ".join(
-                f"{m['id']} ({m['account']}{', sin leer' if not m['read'] else ''}) de {m['from']}: «{m['subject']}»"
-                for m in mails) or "ninguno"))
+            parts.append("Emails from the last 12 h: " + ("; ".join(
+                f"{m['id']} ({m['account']}{', unread' if not m['read'] else ''}) from {m['from']}: «{m['subject']}»"
+                for m in mails) or "none"))
         w = await asyncio.to_thread(weather.forecast)
         if w.get("ok"):
             d = (w.get("days") or [{}])[0]
-            parts.append(f"Tiempo hoy en {w['place']}: ahora {w['temp']}° y {w['text']}; máx {d.get('max')}°, "
-                         f"mín {d.get('min')}°, lluvia {d.get('rain', 0)}%")
+            parts.append(f"Weather today in {w['place']}: now {w['temp']}° and {w['text']}; max {d.get('max')}°, "
+                         f"min {d.get('min')}°, rain {d.get('rain', 0)}%")
         data = await asyncio.to_thread(datos.summary)
         today = data["today"]
-        parts.append(f"Hoy es {today['day']} ({today['mode']}). Lo que le queda hoy: " + ("; ".join(
-            f"{i.get('hora', '')} {i.get('que', '')}".strip() for i in today["items"]) or "nada"))
-        parts.append("Tareas pendientes (todas; tú eliges las relevantes para hoy o estos días): " + "; ".join(
+        parts.append(f"Today is {today['day']} ({today['mode']}). What is left for today: " + ("; ".join(
+            f"{i.get('hora', '')} {i.get('que', '')}".strip() for i in today["items"]) or "nothing"))
+        parts.append("Pending tasks (all of them; you pick the ones relevant for today or the next few days): " + "; ".join(
             f"{t['tarea']} [{t['prioridad']}{', ' + t['cuando'] if t['cuando'] else ''}{', ' + t['estado'] if t['estado'] else ''}]"
             for t in data["tasks"]))
         if data["betis"]:
-            parts.append("Próximos del Betis: " + "; ".join(
+            parts.append("Upcoming Betis matches: " + "; ".join(
                 f"{m.get('partido', '')} {m['cuando']} {m.get('hora', '')}" for m in data["betis"][:2]))
         hoy = [a for a in avisos.upcoming(now) if a["cuando"].startswith(now.strftime("%Y-%m-%d"))]
-        parts.append("Avisos de hoy: " + ("; ".join(f"{a['cuando'][11:]} {a.get('texto', '')}" for a in hoy) or "ninguno"))
-        return ("[Resumen matinal (datos del sistema). Haz un resumen hablado, natural y corto (unas 8 frases, sin listas "
-                "largas ni leer IDs): 1) los correos que importan (ignora publicidad y notificaciones automáticas); "
-                "2) el tiempo de hoy; 3) busca con WebSearch si hoy hay algún partido de fútbol bueno (LaLiga, Champions, "
-                "Europa League, selección o el Betis) con hora y dónde verlo; 4) lo que le toca hoy; 5) solo las tareas "
-                "relevantes; 6) los avisos de hoy.\n" + "\n".join(parts) + "]")
+        parts.append("Reminders for today: " + ("; ".join(f"{a['cuando'][11:]} {a.get('texto', '')}" for a in hoy) or "none"))
+        return ("[Morning summary (system data). Give a short, natural spoken summary (about 8 sentences, no long "
+                "lists, do not read out IDs): 1) the emails that matter (ignore ads and automatic notifications); "
+                "2) today's weather; 3) use WebSearch to check whether there is a good football match today (LaLiga, "
+                "Champions League, Europa League, national team or Betis) with the time and where to watch it; "
+                "4) what is on today; 5) only the relevant tasks; 6) today's reminders. Answer in the language the "
+                "user spoke or wrote (default English).\n" + "\n".join(parts) + "]")
 
     def live_context(self) -> str:
-        """Lo que se ve y suena ahora (dato del sistema), para que Claude no tenga que preguntarlo."""
+        """What is on screen and playing right now (system data), so Claude does not have to ask."""
         parts = []
         sp = self.spotify.summary() if self.spotify.connected else {}
         if sp.get("title"):
-            parts.append(f"música: «{sp['title']}» de {sp['artist']} en {sp.get('device') or '?'}"
-                         + ("" if sp.get("playing") else " (en pausa)"))
+            parts.append(f"music: «{sp['title']}» by {sp['artist']} on {sp.get('device') or '?'}"
+                         + ("" if sp.get("playing") else " (paused)"))
         else:
-            parts.append("música: nada")
+            parts.append("music: nothing")
         v = self._video_status
         if v.get("playing"):
-            parts.append(f"vídeo: «{v.get('title', '')}»" + (" (en pausa)" if v.get("paused") else ""))
-        w = weather.forecast()   # con caché de 15 min
+            parts.append(f"video: «{v.get('title', '')}»" + (" (paused)" if v.get("paused") else ""))
+        w = weather.forecast()   # cached for 15 min
         if w.get("ok"):
-            parts.append(f"tiempo en {w['place']}: {w['temp']}° ({w['text'].lower()}, sensación {w['feels']}°)")
+            parts.append(f"weather in {w['place']}: {w['temp']}° ({w['text'].lower()}, feels like {w['feels']}°)")
         act = timers.active()
         if act:
-            parts.append("temporizadores: " + ", ".join(f"{a['label'] or 'sin nombre'} {timers.say_duration(a['end'] - time.time())}"
+            parts.append("timers: " + ", ".join(f"{a['label'] or 'unnamed'} {timers.say_duration(a['end'] - time.time())}"
                                                      for a in act))
         try:
             lay = json.loads(LAYOUT_FILE.read_text(encoding="utf-8"))
-            parts.append("panel (widgets visibles): " + ", ".join(i["id"] for i in lay if not i.get("hidden")))
+            parts.append("panel (visible widgets): " + ", ".join(i["id"] for i in lay if not i.get("hidden")))
         except (OSError, ValueError):
             pass
         if self.mail.configured:
             unread = self.mail.unread[:6]
-            parts.append("correos sin leer: " + ("; ".join(f"[{m['id']}] {m['from']} → {m['account']}: «{m['subject']}»"
-                                                           for m in unread) if unread else "ninguno"))
+            parts.append("unread emails: " + ("; ".join(f"[{m['id']}] {m['from']} → {m['account']}: «{m['subject']}»"
+                                                           for m in unread) if unread else "none"))
         if self.wa.state == "connected" and self.wa.chats:
-            parts.append("WhatsApp (últimos chats, solo lectura): " + "; ".join(
-                f"{c['name']}{' (grupo)' if c['group'] else ''}: {'yo' if c['mine'] else (c['from'] or c['name'])} «{c['text'][:80]}»"
+            parts.append("WhatsApp (latest chats, read-only): " + "; ".join(
+                f"{c['name']}{' (group)' if c['group'] else ''}: {'me' if c['mine'] else (c['from'] or c['name'])} «{c['text'][:80]}»"
                 for c in self.wa.chats[:6]))
-        parts.append(f"voz {voice_label(settings['voice_es'])} {int(settings['tts_rate']):+d}%, "
-                     f"tema {settings['theme']}, gestos {'sí' if self.vision and self.vision.connected else 'no'}")
-        return "[Ahora mismo (dato del sistema): " + " · ".join(parts) + "]"
+        parts.append(f"voice {voice_label(settings['voice_es'])} {int(settings['tts_rate']):+d}%, "
+                     f"theme {settings['theme']}, gestures {'yes' if self.vision and self.vision.connected else 'no'}")
+        return "[Right now (system data): " + " · ".join(parts) + "]"
 
     def _current_player(self):
         if self.video.playing():
@@ -746,7 +748,7 @@ class Assistant:
         return self.web if self.web.active() else None
 
     async def watch(self, url: str) -> str | None:
-        """Abre una web de vídeo en la ventana controlada. Devuelve el motivo si no se puede."""
+        """Open a video site in the controlled window. Returns the reason if it cannot."""
         try:
             await asyncio.to_thread(self.video.stop)
             try:
@@ -755,7 +757,7 @@ class Assistant:
                 pass
             await asyncio.to_thread(self.web.open, url)
         except RuntimeError as e:
-            log.info("No abro %s: %s", url, e)
+            log.info("Not opening %s: %s", url, e)
             await self.broadcast({"type": "error", "text": str(e)})
             return str(e)
         self.spawn(self._video_refresh(delay=4))
@@ -763,74 +765,74 @@ class Assistant:
         return None
 
     async def _watch_wall(self, url: str):
-        """Si la web pide cuenta (RTVE en directo, Netflix sin sesión…), se lo dice a Charlie: entrar lo hace él."""
+        """If the site asks for an account (RTVE live, Netflix without a session…), tell the user: they sign in themselves."""
         for _ in range(16):
             await asyncio.sleep(2)
             if self.web.wall:
                 name = next((s["name"] for s in settings["video_services"]
-                             if any(self.web.wall.endswith(d) for d in s["domains"])), "esa web")
-                msg = f"{name} pide iniciar sesión para verlo. Entra tú en la ventana y luego me lo vuelves a pedir."
+                             if any(self.web.wall.endswith(d) for d in s["domains"])), "that site")
+                msg = f"{name} requires signing in to watch this. Sign in in the window, then ask me again."
                 await self.broadcast({"type": "error", "text": msg})
                 await self._say(msg)
                 return
 
     async def watch_find(self, service: str, query: str) -> tuple[bool, str]:
-        """Busca «query» en ese servicio (video_sites) y pone lo primero. (ok, frase para decir)."""
-        if video_sites.service_key(service) is None:   # cualquier otra web: se busca en la propia página
+        """Search «query» on that service (video_sites) and play the first hit. Returns (ok, sentence to say)."""
+        if video_sites.service_key(service) is None:   # any other site: search on the page itself
             url = site_url(service)
             if not url:
-                return False, f"No sé cuál es la web de {service}; dime su dirección."
+                return False, f"I do not know which site {service} is; tell me its address."
             self.spawn(self._search_web(url, service, query))
-            return True, f"Busco «{query}» en {service} y lo pongo."
+            return True, f"Searching «{query}» on {service} and playing it."
         try:
             results = await asyncio.to_thread(video_sites.find, service, query)
         except RuntimeError as e:
             return False, str(e)
         if not results:
-            return False, f"No he encontrado «{query}» en {service}."
+            return False, f"I did not find «{query}» on {service}."
         best = results[0]
-        log.info("Ver %r en %s → %s", query, service, best["url"])
-        if best.get("id"):   # YouTube: con mpv, sin anuncios
+        log.info("Watch %r on %s → %s", query, service, best["url"])
+        if best.get("id"):   # YouTube: via mpv, no ads
             await self.play_video(best["id"], best["title"])
         else:
             reason = await self.watch(best["url"])
             if reason:
                 return False, reason
-        if best["kind"] == "búsqueda":   # Netflix, Prime, Disney+: se abre la búsqueda y se pone el primer resultado
+        if best["kind"] == "búsqueda":   # Netflix, Prime, Disney+: open the search and play the first result
             self.spawn(self._play_first(video_sites.service_key(service), service, query))
-            return True, f"Busco «{query}» en {service} y lo pongo."
-        day = f" del {best['date'][8:10]}/{best['date'][5:7]}" if best.get("date") else ""
-        return True, f"Pongo «{best['title']}»{day}."
+            return True, f"Searching «{query}» on {service} and playing it."
+        day = f" from {best['date'][8:10]}/{best['date'][5:7]}" if best.get("date") else ""
+        return True, f"Playing «{best['title']}»{day}."
 
     async def _search_web(self, url: str, name: str, query: str):
-        """Web sin receta: abre la portada, busca como una persona y pone el primer resultado que no sea anuncio."""
+        """Site without a recipe: open the home page, search like a person and play the first result that is not an ad."""
         reason = await self.watch(url)
         if reason:
             await self._say(reason)
             return
         found = await asyncio.to_thread(self.web.search_site, url, query)
-        if not found and not self.web.wall:   # como mínimo, con el buscador («site:web búsqueda»)
+        if not found and not self.web.wall:   # at the very least, via a search engine («site:web query»)
             found = await asyncio.to_thread(self.web.search_engine, url, query)
         if found:
-            log.info("Primer resultado de %r en %s → %s", query, name, found)
+            log.info("First result for %r on %s → %s", query, name, found)
             await self.watch(found)
         elif not self.web.wall:
-            msg = f"No he encontrado «{query}» en {name}. Te dejo la web abierta."
+            msg = f"I did not find «{query}» on {name}. I'll leave the site open."
             await self.broadcast({"type": "error", "text": msg})
             await self._say(msg)
 
     async def _play_first(self, key: str, service: str, query: str):
         url = await asyncio.to_thread(self.web.pick_result, key)
         if url:
-            log.info("Primer resultado de %r en %s → %s", query, service, url)
+            log.info("First result for %r on %s → %s", query, service, url)
             await self.watch(url)
         elif not self.web.wall:
-            msg = f"No he encontrado «{query}» en {service}. Te dejo la búsqueda abierta."
+            msg = f"I did not find «{query}» on {service}. I'll leave the search open."
             await self.broadcast({"type": "error", "text": msg})
             await self._say(msg)
 
     async def play_video(self, video_id: str, title: str, rect: dict | None = None):
-        try:   # que no se pisen la música y el vídeo
+        try:   # so the music and the video do not overlap
             await asyncio.to_thread(self.spotify.pause)
         except Exception:
             pass
@@ -840,7 +842,7 @@ class Assistant:
 
     async def _video_refresh(self, delay: float = 0.3):
         await asyncio.sleep(delay)
-        # en un hilo: mirar si hay web de vídeo es una petición HTTP que, sin vídeo, tarda ~1 s en fallar (Windows)
+        # in a thread: checking for a video site is an HTTP request that, with no video, takes ~1 s to fail (Windows)
         player = await asyncio.to_thread(self._current_player)
         st = await asyncio.to_thread(player.status) if player else {"playing": False}
         if st != self._video_status:
@@ -848,10 +850,10 @@ class Assistant:
             await self.broadcast({"type": "video", **st})
 
     async def _on_barge(self, text: str, just_stop: bool):
-        """Le has hablado mientras hablaba: se corta todo (la tarea también) y te atiende."""
+        """The user spoke while it was talking: everything is cut (the task too) and it listens."""
         if self.state != "speaking" and not self.player.busy():
             return
-        log.info("Interrumpido por voz: %r", text)
+        log.info("Interrupted by voice: %r", text)
         await self.interrupt()
         if just_stop:
             self.player.play(audio.chime(self.player.rate, up=False), self.player.rate, mutes_mic=False)
@@ -873,23 +875,23 @@ class Assistant:
     async def _listen(self):
         if not self.listener:
             self._enroll_left = 0
-            await self.broadcast({"type": "error", "text": "El reconocimiento de voz aún se está cargando "
-                                  "(la primera vez se descarga). Mientras, escríbeme."})
+            await self.broadcast({"type": "error", "text": "Speech recognition is still loading "
+                                  "(the first time it downloads). Meanwhile, type to me."})
             return
         if self.mic_mute.muted:
-            await self.broadcast({"type": "error", "text": "El micro está silenciado en Windows. Actívalo desde Estado."})
+            await self.broadcast({"type": "error", "text": "The microphone is muted in Windows. Unmute it from Status."})
         self._followup = False
         self.player.play(audio.chime(self.player.rate), self.player.rate, mutes_mic=False)
         self.listener.activate()
         await self.set_state("listening")
 
     async def _listen_followup(self, gen: int):
-        """Tras responder, deja el micro abierto unos segundos para contestar sin decir «Cortex»."""
+        """After replying, keep the mic open for a few seconds to answer without saying «Cortex»."""
         if not self.listener or gen != self._gen or self.state != "idle" or self._enroll_left or \
                 not settings["followup_seconds"]:
             return
         self._followup = True
-        # el micro sigue silenciado un instante tras hablar (eco): se cuenta desde que se abre
+        # the mic stays muted for a moment after speaking (echo): the time counts from when it opens
         self.listener.activate(timeout=float(settings["followup_seconds"]) + 0.5)
         await self.set_state("listening")
 
@@ -904,11 +906,11 @@ class Assistant:
         if self._enroll_left:
             self._enroll_left = 0
             await self.broadcast({"type": "enroll", "done": True, "count": self.listener.print.user_samples,
-                                  "message": "No te he oído; grabación parada."})
+                                  "message": "I did not hear you; recording stopped."})
         if self.state == "listening":
             await self.set_state("idle")
 
-    # ---------- muestras de «Cortex» ----------
+    # ---------- «Cortex» samples ----------
     async def enroll(self, total: int = 6):
         await self.interrupt()
         self._enroll_left = total
@@ -929,7 +931,7 @@ class Assistant:
         else:
             await self.set_state("idle")
             await self.broadcast({"type": "enroll", "done": True, "count": count,
-                                  "message": "¡Listo! Ahora reentreno el detector con tu voz (unos minutos)."})
+                                  "message": "Done! Now retraining the detector with your voice (a few minutes)."})
             self.spawn(self.retrain_wake())
         await self.broadcast(self.status())
 
@@ -957,39 +959,39 @@ class Assistant:
         self._spoke = False
         self._pending = ""
         self._raw = self._shown = ""
-        self._turn_t = time.monotonic()   # para medir cuánto tarda en empezar a hablar
+        self._turn_t = time.monotonic()   # to measure how long it takes to start speaking
         self._turn = self.spawn(self._guarded(coro))
 
     async def _guarded(self, coro):
-        """Un fallo inesperado en un turno no deja el panel atascado en «pensando»."""
+        """An unexpected failure in a turn does not leave the panel stuck on «thinking»."""
         try:
             await coro
         except Exception:
-            log.exception("Error en el turno")
-            await self.broadcast({"type": "error", "text": "Algo ha fallado; está en el registro."})
+            log.exception("Error in the turn")
+            await self.broadcast({"type": "error", "text": "Something went wrong; it is in the log."})
             await self.set_state("idle")
 
-    # ---------- turnos ----------
+    # ---------- turns ----------
     async def _voice_turn(self, clip: np.ndarray, followup: bool = False, spec=None):
         await self.set_state("transcribing")
         t = time.monotonic()
         text = None
-        if spec is not None:   # ya se empezó a transcribir en la pausa (ver Listener)
+        if spec is not None:   # transcription already started during the pause (see Listener)
             try:
                 text, lang = await asyncio.wrap_future(spec)
                 self.spawn(asyncio.to_thread(save_clip, normalize(clip), f"{lang}: {text}"))
             except Exception:
-                log.exception("La transcripción adelantada falló; la repito")
+                log.exception("The early transcription failed; redoing it")
                 text = None
         if text is None:
             text, lang = await asyncio.to_thread(self.stt.transcribe_command, clip, self._speak_lang)
-        log.info("Transcrito en %.2fs%s (%s): %s", time.monotonic() - t, " (adelantada)" if spec else "", lang, text)
+        log.info("Transcribed in %.2fs%s (%s): %s", time.monotonic() - t, " (early)" if spec else "", lang, text)
         text = strip_wake(text)
         last = next((h["text"] for h in reversed(self.history) if h["role"] == "assistant"), "")
         asked = last.rstrip().endswith("?")
         if not text or (followup and not asked and is_ack(text)):
-            # «ah vale», «okey»… después de una respuesta: no hace falta contestar
-            # (salvo que Cortex acabara de preguntar algo: entonces «sí» o «vale» es la respuesta)
+            # «ah vale», «okey»… after a reply: no need to answer
+            # (unless Cortex had just asked something: then «sí» or «vale» is the answer)
             await self.set_state("idle")
             return
         await self._handle(text, lang, "voz")
@@ -1015,7 +1017,7 @@ class Assistant:
         if intent:
             await self._music(intent, lang)
             return
-        local = route(text, lang) or (datos.route(text) if lang == "es" else None)
+        local = route(text, lang) or datos.route(text)
         if local:
             await self._add("assistant", local, local=True)
             await self._say(local)
@@ -1031,15 +1033,15 @@ class Assistant:
         for mid in list(dict.fromkeys(MAIL_ID_RE.findall(text) if self.mail.configured else []))[:2]:
             try:
                 m = await asyncio.to_thread(self.mail.read, mid)
-                ask += (f"\n\n[Correo {mid} (cuenta {m['account']}) · De: {m['from']} · Asunto: {m['subject']} · "
-                        f"{m['date']}]\n{m['text']}\n[Fin del correo {mid}]")
+                ask += (f"\n\n[Email {mid} (account {m['account']}) · From: {m['from']} · Subject: {m['subject']} · "
+                        f"{m['date']}]\n{m['text']}\n[End of email {mid}]")
             except Exception as e:
-                log.warning("No pude leer el correo %s: %s", mid, e)
+                log.warning("Could not read email %s: %s", mid, e)
         if BANK_RE.search(text):
             try:
                 extra = await asyncio.to_thread(bank_context, text)
             except Exception:
-                log.exception("No pude leer el banco")
+                log.exception("Could not read the bank data")
                 extra = ""
             if extra:
                 ask = f"{text}\n\n{extra}"
@@ -1079,7 +1081,7 @@ class Assistant:
         for raw in MAIL_SEND_TAG.findall(reply):
             p = [x.strip() for x in raw.split("|")]
             if len(p) >= 3:
-                # para | asunto | texto | cuenta (opcional: principal o secundaria)
+                # to | subject | text | account (optional: primary or secondary)
                 self.spawn(self._mail_action(self.mail.send, p[0], p[1], p[2], p[3] if len(p) > 3 else None))
         for mid, body in MAIL_REPLY_TAG.findall(reply):
             self.spawn(self._mail_action(self.mail.reply, mid, body.strip()))
@@ -1092,7 +1094,7 @@ class Assistant:
         await self.broadcast(self.status())
         for command in commands:
             intent = music.parse(command)
-            log.info("Claude pide música: %r → %s", command, intent)
+            log.info("Claude requests music: %r → %s", command, intent)
             if intent:
                 await self._music(intent, lang, announce=False)
         await self._wait_speech()
@@ -1114,9 +1116,9 @@ class Assistant:
                 try:
                     name = await asyncio.to_thread(self.spotify.play_playlist, value)
                 except SpotifyError as e:
-                    if not str(e).startswith("No encuentro"):
+                    if not str(e).startswith("I cannot find any playlist"):
                         raise
-                    name = await asyncio.to_thread(self.spotify.play_query, value)   # no es playlist: canción
+                    name = await asyncio.to_thread(self.spotify.play_query, value)   # not a playlist: a song
                 reply = f"Playing {name}." if en else f"Pongo {name}."
             elif kind in ("artist", "query"):
                 name = await asyncio.to_thread(self.spotify.play_query, value, "artist" if kind == "artist" else "any")
@@ -1153,7 +1155,7 @@ class Assistant:
             await self._fail(str(e))
             return
         if kind in ("playlist", "artist", "query", "device"):
-            # poner música: sin respuesta hablada, la música ya es la respuesta (en el chat sí queda escrito)
+            # playing music: no spoken reply, the music is the answer (it is still written in the chat)
             await self._add("assistant", reply, local=True)
         elif not announce:
             self.player.play(audio.chime(self.player.rate, up=False), self.player.rate, mutes_mic=False)
@@ -1175,14 +1177,14 @@ class Assistant:
             except SpotifyError:
                 pass
             except Exception:
-                log.exception("Error leyendo Spotify")
+                log.exception("Error reading Spotify")
         await self.broadcast({"type": "spotify", **self.spotify.summary()})
 
     def _on_delta(self, chunk: str):
-        """Va acumulando texto y manda a hablar cada frase completa en cuanto llega."""
+        """Accumulate text and send each complete sentence to be spoken as soon as it arrives."""
         self._raw += chunk
         visible = ANY_TAG.sub("", self._raw)
-        cut = visible.find("[[")   # etiqueta a medio llegar: se guarda hasta que se cierre
+        cut = visible.find("[[")   # tag only partly arrived: held back until it closes
         if cut >= 0:
             visible = visible[:cut]
         elif visible.endswith("["):
@@ -1205,7 +1207,7 @@ class Assistant:
             lang = "en" if self._speak_lang == "en" else "es"
             self._queue_sentence(random.choice(FILLERS[lang]))
         if name in SEARCH_TOOLS:
-            self.spawn(self.broadcast({"type": "activity", "text": "Buscando en internet…"}))
+            self.spawn(self.broadcast({"type": "activity", "text": "Searching the web…"}))
 
     def _queue_sentence(self, text: str):
         self._spoke = True
@@ -1246,26 +1248,26 @@ class Assistant:
                                 break
                             await self.set_state("speaking")
                             if self._turn_t and gen == self._gen and time.monotonic() - self._turn_t < 60:
-                                log.info("Empieza a hablar a los %.2f s", time.monotonic() - self._turn_t)
+                                log.info("Starts speaking after %.2f s", time.monotonic() - self._turn_t)
                                 self._turn_t = 0.0
                             if self.barge:
                                 self.barge.said(clean)
                             self.player.play(pcm, rate)
                     finally:
-                        await voice.aclose()   # cortada a medias: suelta ya la conexión de la voz
+                        await voice.aclose()   # cut off midway: release the voice connection now
             except Exception:
-                log.exception("Error sintetizando voz")
+                log.exception("Error synthesizing speech")
             finally:
                 self._sentences.task_done()
 
     async def _monitor(self):
-        """Silencia el micro mientras suena Cortex (con una cola para el eco del Bluetooth)."""
+        """Mute the mic while Cortex is audible (with a tail for Bluetooth echo)."""
         while True:
             try:
                 await self._monitor_loop()
             except Exception:
-                # si este bucle muriera, el micro se quedaría silenciado para siempre
-                log.exception("Error en el bucle de vigilancia; lo reanudo")
+                # if this loop died, the mic would stay muted forever
+                log.exception("Error in the monitor loop; resuming")
                 await asyncio.sleep(1)
 
     async def _monitor_loop(self):
@@ -1274,7 +1276,7 @@ class Assistant:
         last_bank = -1e9
         last_timer = last_video = last_web_check = 0.0
         last_mail = last_wa = -1e9
-        last_update_try = time.monotonic() - 540   # la primera, al minuto de arrancar
+        last_update_try = time.monotonic() - 540   # the first one, a minute after startup
         while True:
             now = time.monotonic()
             if self.player.busy():
@@ -1301,8 +1303,8 @@ class Assistant:
             outs = self.mic_mute.outputs
             if outs is not None and outs != self._outputs and self.state == "idle" and not self.player.busy():
                 if self._outputs is not None:
-                    # se ha conectado o desconectado un altavoz (Bluetooth): reabrir para no hablarle al vacío
-                    log.info("Cambian los altavoces (%s); reabro el audio", outs)
+                    # a speaker was connected or disconnected (Bluetooth): reopen so it does not talk into the void
+                    log.info("Speakers changed (%s); reopening audio", outs)
                     await asyncio.to_thread(self.open_devices)
                 self._outputs = outs
             if now - last_video >= 2 and (self.video.playing() or self._video_status.get("playing")
@@ -1334,29 +1336,29 @@ class Assistant:
                 last_aviso = now
                 self.spawn(self._check_avisos())
             if now - last_bank > 1800:
-                # el saldo se renueva solo cada 6 h (lo decide la caché de bank.summary: ~4 consultas al día)
+                # the balance refreshes itself every 6 h (decided by the bank.summary cache: ~4 queries a day)
                 last_bank = now
                 self.spawn(asyncio.to_thread(bank.summary))
                 self._maybe_nightly_retrain()
             t = time.monotonic()
             await asyncio.sleep(0.08)
             lag = time.monotonic() - t - 0.08
-            if lag > 120:   # el portátil estuvo suspendido, no es un bloqueo; la red tarda en volver
-                log.info("Vuelvo de una suspensión de %.0f min", lag / 60)
+            if lag > 120:   # the laptop was suspended, it is not a hang; the network takes a while to come back
+                log.info("Back from a %.0f min suspend", lag / 60)
                 last_update_try = time.monotonic()
-                last_mail = time.monotonic() - 40   # el correo, a los 20 s
-            elif lag > 0.5:   # algo bloqueó el bucle principal (una llamada lenta sin to_thread): que quede rastro
-                log.warning("El bucle principal se ha quedado parado %.1f s", lag)
+                last_mail = time.monotonic() - 40   # mail, after 20 s
+            elif lag > 0.5:   # something blocked the main loop (a slow call without to_thread): leave a trace
+                log.warning("The main loop was stalled for %.1f s", lag)
 
-    # ---------- gestos (cámara) ----------
+    # ---------- gestures (camera) ----------
     async def _on_gesture(self, gesture: str, action: str):
-        log.info("Gesto %s → %s", gesture, action)
+        log.info("Gesture %s → %s", gesture, action)
         await self.broadcast({"type": "gesture", "gesture": gesture, "action": action})
         sp = self.spotify
         try:
             player = await asyncio.to_thread(self._current_player) \
                 if action in ("next", "previous", "toggle", "volume_up", "volume_down") else None
-            if player:   # con un vídeo puesto, los gestos mandan sobre el vídeo
+            if player:   # while a video is playing, gestures control the video
                 cmd = {"next": ("seek", 10), "previous": ("seek", -10), "toggle": ("toggle", None),
                        "volume_up": ("volume", 5), "volume_down": ("volume", -5)}[action]
                 await asyncio.to_thread(player.command, *cmd)
@@ -1367,13 +1369,13 @@ class Assistant:
             elif action == "toggle":
                 await asyncio.to_thread(sp.pause if sp.last_state.get("is_playing") else sp.resume)
             elif action in ("volume_up", "volume_down"):
-                await asyncio.to_thread(sp.change_volume, 5 if action == "volume_up" else -5)   # pasos suaves: los gestos se repiten
+                await asyncio.to_thread(sp.change_volume, 5 if action == "volume_up" else -5)   # small steps: gestures repeat
             elif action == "listen" and self.state == "idle":
                 await self._listen()
             elif action == "stop":
                 await self.interrupt()
             elif action == "quiet":
-                # se calla pero no corta lo que está haciendo (poner música, buscar algo…)
+                # goes quiet but does not cut what it is doing (playing music, searching…)
                 self._quiet_gen = self._gen
                 self.player.stop()
             elif action == "wake_toggle":
@@ -1393,7 +1395,7 @@ class Assistant:
             await self.broadcast({"type": "error", "text": str(e)})
             return
         except Exception:
-            log.exception("Error con el gesto %s", gesture)
+            log.exception("Error handling gesture %s", gesture)
             return
         if action in ("next", "previous", "toggle", "volume_up", "volume_down"):
             self.spawn(self._spotify_refresh(delay=0.5))
@@ -1411,7 +1413,7 @@ class Assistant:
             self._vision_sent = light
             await self.broadcast({"type": "vision", **state})
 
-    # ---------- reentrenar «Cortex» ----------
+    # ---------- retrain «Cortex» ----------
     def _maybe_nightly_retrain(self):
         t = datetime.now()
         if t.hour != 4 or self._retrained_day == t.date() or self.state != "idle":
@@ -1423,12 +1425,12 @@ class Assistant:
             self.spawn(self.retrain_wake())
 
     async def retrain_wake(self):
-        """Reentrena el detector con lo último (incluidas activaciones reales) en segundo plano, con prioridad baja."""
+        """Retrain the detector with the latest data (including real activations) in the background, at low priority."""
         if self._retraining:
             return
         self._retraining = True
         await self.broadcast({"type": "wake_train", "running": True})
-        log.info("Reentrenando el detector de «Cortex»")
+        log.info("Retraining the «Cortex» detector")
         try:
             proc = await asyncio.create_subprocess_exec(
                 str(ROOT / ".venv" / "Scripts" / "python.exe"), str(ROOT / "tools" / "train_wake.py"),
@@ -1440,13 +1442,13 @@ class Assistant:
             if ok and self.listener:
                 self.listener.reload_detector()
             summary = [l for l in out.decode("utf-8", "replace").splitlines() if l.startswith("umbral 0.85")]
-            log.info("Reentrenado (%s): %s", "ok" if ok else "fallo", summary)
+            log.info("Retrained (%s): %s", "ok" if ok else "failed", summary)
             await self.broadcast({"type": "wake_train", "running": False, "ok": ok,
                                   "summary": summary[0] if summary else ""})
         finally:
             self._retraining = False
 
-    # ---------- avisos ----------
+    # ---------- reminders ----------
     async def _apply_aviso_tags(self, reply: str):
         changed = False
         for body in avisos.TAG.findall(reply):
@@ -1463,68 +1465,68 @@ class Assistant:
 
     async def _timer_done(self, t: dict):
         label = t.get("label") or ""
-        log.info("Temporizador terminado: %s", label or timers.say_duration(t["seconds"]))
+        log.info("Timer finished: %s", label or timers.say_duration(t["seconds"]))
         await self.broadcast({"type": "timer_done", "timer": t})
         await self.broadcast({"type": "timers", "timers": timers.active()})
-        for _ in range(3):   # que se oiga aunque haya música
+        for _ in range(3):   # so it is heard even with music playing
             self.player.play(audio.chime(self.player.rate), self.player.rate, mutes_mic=False)
             await asyncio.sleep(0.5)
-        self._speak_lang = "es"
-        await self._say(f"¡Tiempo! Ya está {label}." if label else "¡Tiempo! Se acabó el temporizador.")
+        self._speak_lang = settings["notice_language"]
+        await self._say(f"Time's up! {label} is ready." if label else "Time's up! The timer has finished.")
 
     async def _check_avisos(self):
         try:
             fired = await asyncio.to_thread(avisos.due, datetime.now())
         except Exception:
-            log.exception("Error mirando los avisos")
+            log.exception("Error checking reminders")
             return
         for a in fired:
-            # espera a que Cortex acabe lo que esté haciendo (máx. 2 min) para no pisarle
+            # wait for Cortex to finish what it is doing (max 2 min) so as not to talk over it
             for _ in range(240):
                 if self.state == "idle":
                     break
                 await asyncio.sleep(0.5)
-            log.info("Aviso: %s", a.get("texto"))
+            log.info("Reminder: %s", a.get("texto"))
             await self.broadcast({"type": "aviso", "texto": a.get("texto", "")})
-            await self._add("assistant", f"Aviso: {a.get('texto', '')}", local=True)
+            await self._add("assistant", f"Reminder: {a.get('texto', '')}", local=True)
             self.player.play(audio.chime(self.player.rate), self.player.rate, mutes_mic=False)
-            self._speak_lang = "es"
-            await self._say(f"Oye, te recuerdo: {a.get('texto', '')}.")
+            self._speak_lang = settings["notice_language"]
+            await self._say(f"Hey, a reminder: {a.get('texto', '')}.")
             await self._wait_speech()
         if fired:
             await self.broadcast_avisos()
 
     async def _refresh_data(self):
-        """Regenera estado.md si cambió algo y avisa a los widgets."""
+        """Regenerate estado.md if anything changed and notify the widgets."""
         try:
             changed = await asyncio.to_thread(self.estado.refresh)
             if changed and self.clients:
                 await self.broadcast({"type": "data", "data": await asyncio.to_thread(datos.summary)})
         except Exception:
-            log.exception("Error actualizando estado.md")
+            log.exception("Error updating estado.md")
 
 
 def keep_awake():
-    """Que el portátil no se duerma ni apague la pantalla mientras Cortex esté vivo (se deshace al salir)."""
+    """Keep the laptop from sleeping or turning off the screen while Cortex is alive (undone on exit)."""
     import ctypes
     ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x00000001, 0x00000002
     try:
         ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
     except Exception:
-        log.warning("No pude evitar que el portátil se duerma")
+        log.warning("Could not prevent the laptop from sleeping")
 
 
 assistant = Assistant()
 
 
-@asynccontextmanager
 def _quiet_resets(loop, context):
-    """Windows avisa con un traceback cada vez que el navegador corta una conexión (WinError 10054): es normal."""
+    """Windows prints a traceback every time the browser drops a connection (WinError 10054): it is normal."""
     if isinstance(context.get("exception"), ConnectionResetError) and "connection_lost" in str(context.get("handle", "")):
         return
     loop.default_exception_handler(context)
 
 
+@asynccontextmanager
 async def lifespan(_app):
     await assistant.start()
     yield
@@ -1542,19 +1544,19 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 @app.middleware("http")
 async def same_origin_only(request, call_next):
-    """Las órdenes (POST…) solo desde el panel: el navegador manda «Origin» en las peticiones entre webs,
-    y sin esto una web cualquiera podría lanzar, a ciegas, reentrenos, actualizaciones…"""
+    """Commands (POST…) only from the panel: the browser sends «Origin» on cross-site requests,
+    and without this any website could blindly trigger retrains, updates…"""
     origin = request.headers.get("origin")
     local = not origin or urlparse(origin).hostname in ("127.0.0.1", "localhost")
     if request.method not in ("GET", "HEAD", "OPTIONS") and not local:
-        log.warning("Petición %s %s rechazada desde %s", request.method, request.url.path, origin)
+        log.warning("Request %s %s rejected from %s", request.method, request.url.path, origin)
         return Response(status_code=403)
     return await call_next(request)
 
 
 @app.middleware("http")
 async def no_cache(request, call_next):
-    """Que Edge no se quede con una versión vieja del panel."""
+    """So that Edge does not keep an old version of the panel."""
     response = await call_next(request)
     if not request.url.path.startswith("/api"):
         response.headers["Cache-Control"] = "no-store"
@@ -1617,7 +1619,7 @@ async def youtube_search(q: str = ""):
 
 @app.get("/favicon.ico")
 async def favicon():
-    """El mismo icono que el de la bandeja (lo crea tools/tray.py)."""
+    """The same icon as the tray one (created by tools/tray.py)."""
     ico = ROOT / "logs" / "cortex.ico"
     return FileResponse(ico, media_type="image/x-icon") if ico.exists() else Response(status_code=204)
 
@@ -1643,8 +1645,8 @@ async def whatsapp_media(jid: str, id: str):
         path = await asyncio.to_thread(assistant.wa.media_file, jid, id)
     except Exception as e:
         gone = any(k in str(e) for k in ("403", "404", "410", "incomplete media"))
-        log.info("WhatsApp: no pude bajar %s: %s", id, e)
-        return Response("WhatsApp ya no lo tiene" if gone else "No se pudo descargar", status_code=410 if gone else 502)
+        log.info("WhatsApp: could not download %s: %s", id, e)
+        return Response("WhatsApp no longer has it" if gone else "Could not download", status_code=410 if gone else 502)
     kind = {".ogg": "audio/ogg", ".opus": "audio/ogg", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".mp4": "video/mp4"}.get(path.suffix.lower())
     return FileResponse(path, media_type=kind, headers={"Cache-Control": "private, max-age=86400"})
@@ -1652,7 +1654,7 @@ async def whatsapp_media(jid: str, id: str):
 
 @app.post("/api/whatsapp/mote")
 async def whatsapp_mote(body: dict):
-    """Mote de un contacto (vacío = quitarlo): Cortex lo dice así en avisos, panel y respuestas."""
+    """A contact's nickname (empty = remove it): Cortex uses it in notices, panel and replies."""
     await asyncio.to_thread(assistant.wa.set_mote, str(body.get("name", "")), str(body.get("mote", "")))
     await assistant.check_whatsapp()
     return {"ok": True}
@@ -1660,21 +1662,21 @@ async def whatsapp_mote(body: dict):
 
 @app.post("/api/whatsapp/send")
 async def whatsapp_send(body: dict):
-    """Enviar desde el chat abierto en el panel, si el usuario eligió «leer y escribir». Claude no tiene esta herramienta."""
+    """Send from the chat open in the panel, if the user chose «read and write». Claude does not have this tool."""
     error = await asyncio.to_thread(assistant.wa.send, str(body.get("jid", "")), str(body.get("text", "")))
     return {"ok": not error, "error": error}
 
 
 @app.post("/api/whatsapp/check")
 async def whatsapp_check():
-    """Botón «Recargar» del panel: mira ya si hay mensajes nuevos."""
+    """«Reload» button in the panel: check for new messages now."""
     await assistant.check_whatsapp()
     return assistant.wa.summary()
 
 
 @app.post("/api/whatsapp/mute")
 async def whatsapp_mute(body: dict):
-    """Silenciar o no un chat (que avise o no). Los grupos vienen silenciados."""
+    """Mute or unmute a chat (whether it notifies). Groups come muted."""
     await asyncio.to_thread(assistant.wa.set_muted, str(body.get("jid", "")), str(body.get("name", "")), bool(body.get("muted")))
     await assistant.broadcast({"type": "whatsapp", **assistant.wa.summary()})
     return {"ok": True}
@@ -1682,7 +1684,7 @@ async def whatsapp_mute(body: dict):
 
 @app.get("/api/whatsapp/qr.svg")
 async def whatsapp_qr():
-    """El QR para vincular WhatsApp (Ajustes → Dispositivos vinculados), como imagen para el panel."""
+    """The QR to link WhatsApp (Settings → Linked devices), as an image for the panel."""
     import io
     import qrcode
     import qrcode.image.svg
@@ -1706,19 +1708,19 @@ async def mail_open(id: str):
     try:
         return await asyncio.to_thread(assistant.mail.open, id)
     except Exception as e:
-        log.info("Correo: no pude abrir %s: %s", id, e)
-        return Response(f"No pude abrir el correo: {e}", status_code=502)
+        log.info("Mail: could not open %s: %s", id, e)
+        return Response(f"Could not open the email: {e}", status_code=502)
 
 
 @app.get("/api/mail/view")
 async def mail_view(id: str):
-    """El cuerpo del correo para el iframe del panel: sin scripts ni formularios (CSP + sandbox)."""
+    """The email body for the panel iframe: no scripts or forms (CSP + sandbox)."""
     if not MAIL_ID.match(id):
         return Response(status_code=400)
     try:
         page = await asyncio.to_thread(assistant.mail.html, id)
     except Exception as e:
-        page = f"<p style='font:15px system-ui;color:#b91c1c'>No pude abrir el correo: {e}</p>"
+        page = f"<p style='font:15px system-ui;color:#b91c1c'>Could not open the email: {e}</p>"
     return HTMLResponse(page, headers={"Content-Security-Policy": MAIL_CSP, "Cache-Control": "no-store"})
 
 
@@ -1732,7 +1734,7 @@ async def mail_part(id: str, n: int, dl: int = 0):
         return Response(status_code=404)
     from urllib.parse import quote
     how = "attachment" if dl else "inline"
-    # lo que el navegador ejecutaría (html, svg…) se baja siempre, no se abre aquí
+    # anything the browser would execute (html, svg…) is always downloaded, never opened here
     if not dl and not kind.startswith(("image/", "audio/", "video/")) and kind != "application/pdf" or kind == "image/svg+xml":
         how = "attachment"
     return Response(data, media_type=kind, headers={"Content-Disposition": f"{how}; filename*=UTF-8''{quote(name)}",
@@ -1741,7 +1743,7 @@ async def mail_part(id: str, n: int, dl: int = 0):
 
 @app.post("/api/mail/send")
 async def send_mail(body: dict):
-    """Enviar (to, subject, text, account) o responder (reply_to = ID, text) desde el panel."""
+    """Send (to, subject, text, account) or reply (reply_to = ID, text) from the panel."""
     try:
         if body.get("reply_to"):
             said = await asyncio.to_thread(assistant.mail.reply, str(body["reply_to"]), str(body.get("text", "")))
@@ -1756,7 +1758,7 @@ async def send_mail(body: dict):
 
 @app.post("/api/mail/login")
 async def mail_login(body: dict):
-    """Conectar una cuenta desde el panel: Charlie pega su contraseña de aplicación y se prueba en el momento."""
+    """Connect an account from the panel: the user pastes their app password and it is tested immediately."""
     err = await asyncio.to_thread(assistant.mail.connect, str(body.get("slot", "")), str(body.get("user", "")),
                                   str(body.get("password", "")))
     if err:
@@ -1767,8 +1769,8 @@ async def mail_login(body: dict):
 
 @app.post("/api/mail/apppasswords")
 async def mail_apppasswords(body: dict):
-    """Desactivado en Cortex: no abre páginas de inicio de sesión. La contraseña de aplicación se crea a mano."""
-    return {"ok": False, "error": "Crea la contraseña de aplicación a mano en tu cuenta de Google."}
+    """Disabled in Cortex: it does not open sign-in pages. The app password is created by hand."""
+    return {"ok": False, "error": "Create the app password by hand in your Google account."}
 
 
 @app.post("/api/mail/check")
@@ -1797,13 +1799,13 @@ async def run_update():
 
 @app.get("/api/devices")
 async def get_devices():
-    """Aparatos de casa: los de Spotify Connect (se les puede mandar la música) y los vistos en la red."""
+    """Home devices: Spotify Connect ones (music can be sent to them) and those seen on the network."""
     sp = assistant.spotify
     music = []
     if sp.connected:
         try:
             for d in await asyncio.to_thread(sp.devices):
-                music.append({"id": d["id"], "name": "Este portátil" if sp._is_laptop(d["name"]) else d["name"],
+                music.append({"id": d["id"], "name": "This laptop" if sp._is_laptop(d["name"]) else d["name"],
                               "type": d.get("type", ""), "active": bool(d.get("is_active")),
                               "volume": d.get("volume_percent")})
         except SpotifyError:
@@ -1814,12 +1816,12 @@ async def get_devices():
 
 @app.post("/api/devices/music")
 async def music_to_device(body: dict):
-    """Pasa la música de Spotify a ese aparato (por id de Spotify Connect)."""
+    """Move Spotify playback to that device (by Spotify Connect id)."""
     sp = assistant.spotify
     try:
         await asyncio.to_thread(sp.move_to, str(body["id"]))
     except (SpotifyError, KeyError) as e:
-        return {"ok": False, "error": str(e) or "Falta el aparato"}
+        return {"ok": False, "error": str(e) or "Missing device"}
     assistant.spawn(assistant._spotify_refresh(delay=1))
     return {"ok": True}
 
@@ -1844,7 +1846,7 @@ async def video_services():
 
 @app.get("/api/web/accounts")
 async def web_accounts():
-    return webaccounts.accounts()   # sin contraseñas
+    return webaccounts.accounts()   # no passwords
 
 
 @app.post("/api/web/accounts")
@@ -1891,7 +1893,7 @@ async def video_control(body: dict):
         reason = await assistant.watch(str(body["url"]))
         if reason:
             return {"ok": False, "error": reason}
-    elif action == "find" and body.get("service") and body.get("query"):   # buscar en un servicio o en cualquier web
+    elif action == "find" and body.get("service") and body.get("query"):   # search on a service or on any site
         ok, said = await assistant.watch_find(str(body["service"]), str(body["query"]))
         return {"ok": ok, "text": said}
     elif action in ("toggle", "seek", "volume", "fullscreen", "stop", "pause", "resume"):
@@ -1914,7 +1916,7 @@ async def set_timer(body: dict):
     else:
         seconds = int(float(body.get("seconds", 0)))
         if not 0 < seconds <= 24 * 3600:
-            return {"ok": False, "error": "Duración no válida"}
+            return {"ok": False, "error": "Invalid duration"}
         timers.add(seconds, str(body.get("label", ""))[:40])
     await assistant.broadcast({"type": "timers", "timers": timers.active()})
     return {"ok": True, "timers": timers.active(), "now": time.time()}
@@ -1937,14 +1939,14 @@ async def change_compra(body: dict):
         else:
             items = await asyncio.to_thread(compra.items)
     except OSError as e:
-        return {"ok": False, "error": f"No pude guardar la lista: {e}"}
+        return {"ok": False, "error": f"Could not save the list: {e}"}
     await assistant.broadcast({"type": "compra", "items": items})
     return {"ok": True, "items": items}
 
 
 @app.post("/api/tasks")
 async def edit_task(body: dict):
-    """Tareas a mano desde el panel: add, edit, done o delete (por su posición «i» en tareas.yaml). Sin confirmación."""
+    """Manual tasks from the panel: add, edit, done or delete (by its position «i» in tareas.yaml). No confirmation."""
     from ruamel.yaml import YAML
     from ruamel.yaml.scalarstring import DoubleQuotedScalarString as Q
     action = body.get("action")
@@ -1964,15 +1966,15 @@ async def edit_task(body: dict):
         fields = {k: str(body[k]).strip()[:200] for k in ("cuando", "prioridad", "notas") if k in body}
         if action == "add":
             if not text:
-                return "Escribe la tarea"
+                return "Write the task"
             item = {"tarea": Q(text), "prioridad": fields.get("prioridad") or "media", "estado": "pendiente"}
             if fields.get("cuando"):
                 item["cuando"] = Q(fields["cuando"])
-            pend.insert(0, item)   # arriba (y así no se descoloca el hueco antes de «recurrentes»)
+            pend.insert(0, item)   # at the top (so the gap before «recurrentes» is not disturbed)
         else:
             i = body.get("i")
             if not isinstance(i, int) or not 0 <= i < len(pend):
-                return "No encuentro esa tarea"
+                return "Task not found"
             t = pend[i]
             if action == "delete":
                 del pend[i]
@@ -1990,7 +1992,7 @@ async def edit_task(body: dict):
                     elif k in t and k != "prioridad":
                         del t[k]
             else:
-                return "Acción desconocida"
+                return "Unknown action"
         backup = ROOT / "logs" / "backups"
         backup.mkdir(parents=True, exist_ok=True)
         if path.exists():
@@ -2002,14 +2004,14 @@ async def edit_task(body: dict):
     err = await asyncio.to_thread(apply)
     if err:
         return {"ok": False, "error": err}
-    log.info("Tarea desde el panel: %s", action)
+    log.info("Task from the panel: %s", action)
     await assistant._refresh_data()
     return {"ok": True, "data": await asyncio.to_thread(datos.summary)}
 
 
 @app.get("/api/bank")
 async def get_bank():
-    """Saldo de Revolut para el panel (de la caché: el banco solo deja unas 4 consultas al día sin ti delante)."""
+    """Revolut balance for the panel (from the cache: the bank only allows about 4 queries a day without you present)."""
     data = await asyncio.to_thread(bank.summary)
     if not data.get("accounts"):
         return {"ok": False}
@@ -2019,7 +2021,7 @@ async def get_bank():
                           "recent": (a.get("transactions") or [])[:12]} for a in data["accounts"]]}
 
 
-# archivos de datos que se pueden editar desde el panel (los avisos tienen su propio formulario)
+# data files that can be edited from the panel (reminders have their own form)
 EDITABLE = {"tareas": "tareas.yaml", "comidas": "comidas.yaml", "gym": "gym.yaml", "dinero": "dinero.yaml",
             "fechas": "fechas.yaml", "betis": "betis.yaml", "horario": "horario.yaml", "compra": "compra.md"}
 
@@ -2027,7 +2029,7 @@ EDITABLE = {"tareas": "tareas.yaml", "comidas": "comidas.yaml", "gym": "gym.yaml
 @app.get("/api/file/{name}")
 async def read_file(name: str):
     if name not in EDITABLE:
-        return {"ok": False, "error": "Ese archivo no se puede editar"}
+        return {"ok": False, "error": "That file cannot be edited"}
     path = datos.folder() / EDITABLE[name]
     text = await asyncio.to_thread(path.read_text, encoding="utf-8") if path.exists() else ""
     return {"ok": True, "name": name, "file": EDITABLE[name], "text": text}
@@ -2036,7 +2038,7 @@ async def read_file(name: str):
 @app.post("/api/file/{name}")
 async def write_file(name: str, body: dict):
     if name not in EDITABLE:
-        return {"ok": False, "error": "Ese archivo no se puede editar"}
+        return {"ok": False, "error": "That file cannot be edited"}
     text = str(body.get("text", ""))
     file = EDITABLE[name]
     if file.endswith(".yaml"):
@@ -2045,12 +2047,12 @@ async def write_file(name: str, body: dict):
             data = yaml.safe_load(text)
         except yaml.YAMLError as e:
             mark = getattr(e, "problem_mark", None)
-            where = f" (línea {mark.line + 1})" if mark else ""
-            return {"ok": False, "error": f"El formato no es válido{where}: {getattr(e, 'problem', None) or e}"}
+            where = f" (line {mark.line + 1})" if mark else ""
+            return {"ok": False, "error": f"Invalid format{where}: {getattr(e, 'problem', None) or e}"}
         if data is not None and not isinstance(data, dict):
-            return {"ok": False, "error": "El archivo debe tener la forma «clave: valor»"}
+            return {"ok": False, "error": "The file must have the form «key: value»"}
     path = datos.folder() / file
-    # copia de la versión anterior por si acaso (las 20 últimas, en la carpeta de código)
+    # copy of the previous version just in case (the last 20, in the code folder)
     backup = ROOT / "logs" / "backups"
     backup.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -2059,14 +2061,14 @@ async def write_file(name: str, body: dict):
         for old in sorted(backup.glob(f"{path.stem}-*"))[:-20]:
             old.unlink(missing_ok=True)
     await asyncio.to_thread(path.write_text, text, encoding="utf-8")
-    log.info("Editado desde el panel: %s", file)
+    log.info("Edited from the panel: %s", file)
     assistant.spawn(assistant._refresh_data())
     return {"ok": True}
 
 
 @app.get("/api/camera.mjpg")
 async def camera_stream():
-    """El vídeo de la cámara lo da Cortex Sense, que es quien la tiene abierta."""
+    """The camera video comes from Cortex Sense, which is the one holding the camera open."""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(settings["sense_url"] + "/api/camera.mjpg")
 
@@ -2075,7 +2077,7 @@ async def camera_stream():
 async def record_gesture(body: dict):
     name = str(body.get("name", "")).strip()
     if not assistant.vision or not await asyncio.to_thread(assistant.vision.record_custom, name):
-        return {"error": "No puedo grabar ahora: ¿cámara activada y nombre sin «:»?"}
+        return {"error": "Cannot record right now: is the camera on and does the name have no «:»?"}
     return {"ok": True}
 
 
@@ -2101,11 +2103,11 @@ async def get_avisos():
 async def add_aviso(body: dict):
     when = avisos.parse_when(body.get("cuando"))
     if not when or not str(body.get("texto", "")).strip():
-        return {"error": "Falta la fecha o el texto del aviso."}
+        return {"error": "The reminder is missing its date or text."}
     try:
         await asyncio.to_thread(avisos.add, when, str(body["texto"]), str(body.get("repetir", "")))
     except ValueError as e:
-        return {"error": f"No lo guardo: {e}."}
+        return {"error": f"Not saved: {e}."}
     await assistant.broadcast_avisos()
     return {"ok": True}
 
@@ -2131,9 +2133,9 @@ async def set_weather_place(body: dict):
                                     params={"name": name, "count": 1, "language": "es"}, timeout=8)
         found = (r.json().get("results") or [None])[0]
     except Exception:
-        return {"error": "No llego al buscador de ciudades, ¿hay internet?"}
+        return {"error": "Cannot reach the city search; is there an internet connection?"}
     if not found:
-        return {"error": f"No encuentro «{name}»."}
+        return {"error": f"Could not find «{name}»."}
     settings.update({"weather_place": {"name": found["name"], "lat": found["latitude"], "lon": found["longitude"]}})
     await assistant.broadcast({"type": "settings", "settings": settings.all()})
     return await asyncio.to_thread(weather.forecast)
@@ -2142,20 +2144,20 @@ async def set_weather_place(body: dict):
 @app.post("/api/voice/test")
 async def test_voice(body: dict):
     lang = body.get("lang", "es")
-    text = {"es": "¡Hola! Soy Cortex, tu asistente de voz. Así sueno ahora mismo.", "en": "Hi! I'm Cortex. This is how I sound."}[lang]
+    text = {"es": "¡Hola! Soy Cortex, tu asistente de voz. Así sueno ahora mismo.", "en": "Hi! I'm Cortex. This is how I sound."}[lang]   # one sample per voice language
     assistant._speak_lang = lang
     assistant._queue_sentence(text)
     return {"ok": True}
 
 
 def _page(message: str) -> HTMLResponse:
-    return HTMLResponse(f"<p style='font:18px system-ui;padding:40px'>{message} <a href='/'>Volver</a></p>")
+    return HTMLResponse(f"<p style='font:18px system-ui;padding:40px'>{message} <a href='/'>Back</a></p>")
 
 
-# ---------- primera vez ----------
+# ---------- first run ----------
 @app.get("/api/setup")
 async def setup_state():
-    """Qué cuentas están ya conectadas (para el asistente de configuración). Sin datos de las cuentas."""
+    """Which accounts are already connected (for the setup wizard). No account data."""
     return {"claude": await asyncio.to_thread(claude_status),
             "spotify": {"client_id": bool(assistant.spotify.client_id), "connected": assistant.spotify.connected,
                         "redirect_uri": assistant.spotify.redirect_uri},
@@ -2174,7 +2176,7 @@ async def setup_claude():
 
 @app.post("/api/setup/claude/start")
 async def setup_claude_start():
-    """Tras iniciar sesión: arranca el cerebro sin reiniciar Cortex."""
+    """After signing in: start the brain without restarting Cortex."""
     assistant.spawn(assistant._start_brain())
     return {"ok": True}
 
@@ -2183,7 +2185,7 @@ async def setup_claude_start():
 async def setup_spotify(body: dict):
     client_id = str(body.get("client_id", "")).strip()
     if not re.fullmatch(r"[0-9a-fA-F]{32}", client_id):
-        return {"ok": False, "error": "El Client ID son 32 letras y números (a-f, 0-9)."}
+        return {"ok": False, "error": "The Client ID is 32 letters and digits (a-f, 0-9)."}
     await asyncio.to_thread(save_env, {"SPOTIFY_CLIENT_ID": client_id})
     return {"ok": True}
 
@@ -2196,7 +2198,7 @@ async def setup_whatsapp():
 
 @app.post("/api/quit")
 async def quit_app():
-    """Cierra Cortex entero (sin consola no hay otra ventana que cerrar)."""
+    """Quit Cortex entirely (with no console there is no other window to close)."""
     await asyncio.to_thread(assistant.brain.stop)
     assistant.wa.stop()
     asyncio.get_running_loop().call_later(0.3, os._exit, 0)
@@ -2214,7 +2216,7 @@ async def spotify_login():
 @app.get("/spotify/callback")
 async def spotify_callback(code: str = "", state: str = "", error: str = ""):
     if error:
-        return _page(f"Spotify dijo: {error}.")
+        return _page(f"Spotify said: {error}.")
     try:
         await asyncio.to_thread(assistant.spotify.finish_login, code, state)
     except SpotifyError as e:
@@ -2251,7 +2253,7 @@ async def get_layout():
 
 @app.post("/api/layout")
 async def save_layout(items: list[dict]):
-    # un panel con una versión vieja no conoce los widgets nuevos: los que no mande se conservan
+    # a panel running an old version does not know the new widgets: any it does not send are kept
     sent = {i.get("id") for i in items}
     try:
         old = json.loads(LAYOUT_FILE.read_text(encoding="utf-8")) if LAYOUT_FILE.exists() else []
@@ -2271,11 +2273,11 @@ async def refresh_devices():
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
-    # Los websockets no tienen la protección CORS: sin esto, cualquier web abierta en el navegador podría
-    # conectarse, leer la conversación y darle órdenes (mandar correos…). Solo el panel (o scripts locales sin Origin).
+    # WebSockets have no CORS protection: without this, any website open in the browser could
+    # connect, read the conversation and give it orders (send emails…). Only the panel (or local scripts without Origin).
     origin = ws.headers.get("origin")
     if origin and urlparse(origin).hostname not in ("127.0.0.1", "localhost"):
-        log.warning("Websocket rechazado desde %s", origin)
+        log.warning("WebSocket rejected from %s", origin)
         await ws.close(code=1008)
         return
     await ws.accept()

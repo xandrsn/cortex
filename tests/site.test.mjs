@@ -1,4 +1,4 @@
-// node tests/site.test.mjs — la demo web y los repartos de tarjetas, sin navegador. Lo lanza tests/test_site.py.
+// node tests/site.test.mjs — the web demo and the card layouts, without a browser. Launched by tests/test_site.py.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
@@ -11,7 +11,7 @@ vm.runInNewContext(fs.readFileSync(new URL("../site/demo/defaults.js", import.me
 const defaults = box.window.CORTEX_DEFAULTS;
 assert.equal(defaults.data_dir, "");
 
-// ---------- la demo ----------
+// ---------- the demo ----------
 let now = Date.UTC(2026, 0, 5, 12), sent = [];
 const demo = createDemo({ state: freshState(now), defaults, emit: m => sent.push(m), clock: () => now,
   weather: async p => ({ ok: true, place: p.name, text: "Despejado", temp: 20 }) });
@@ -21,7 +21,9 @@ assert.equal(parseAmount("un rato"), 0);
 assert.equal(wmo(61).icon, "rain");
 assert.equal(wmo(1234).icon, "cloud");
 
-assert.match(await demo.ask("Pon un temporizador de 5 minutos"), /5 minutos/);
+assert.match(await demo.ask("Pon un temporizador de 5 minutos"), /5 minutes/);
+assert.match(await demo.ask("set a timer for 2 minutes"), /2 minutes/);
+demo.S.timers.pop();
 assert.equal(demo.S.timers.length, 1);
 assert.deepEqual(demo.due(), []);
 now += 301e3;
@@ -35,40 +37,40 @@ assert.equal(demo.S.tasks[0].tarea, "llamar al dentista");
 assert.match(await demo.ask("recuérdame en 2 minutos beber agua"), /beber agua/);
 assert.match(await demo.ask("recuérdame dentro de media hora que saque la ropa"), /: saque la ropa/);
 now += 121e3;
-assert.deepEqual(demo.due(), ["Aviso: beber agua."]);
-assert.match(await demo.ask("¿qué tiempo hace?"), /20 grados/);
+assert.deepEqual(demo.due(), ["Reminder: beber agua."]);
+assert.match(await demo.ask("¿qué tiempo hace?"), /20 degrees/);
 await demo.ask("modo oscuro");
 assert.equal(demo.settings().theme, "dark");
-assert.match(await demo.ask("escribe un poema"), /no usa Claude/);
+assert.match(await demo.ask("escribe un poema"), /does not use Claude/);
 
 let r = await demo.api("POST", "/api/tasks", "", { action: "add", tarea: "x", prioridad: "rara" });
 assert.equal(r.data.tasks[0].prioridad, "media");
 r = await demo.api("POST", "/api/tasks", "", { action: "done", i: r.data.tasks[0].i });
 assert.ok(!r.data.tasks.some(t => t.tarea === "x"));
-assert.equal((await demo.api("POST", "/api/avisos", "", { texto: "tarde", cuando: "2020-01-01 10:00" })).error, "Elige una hora futura.");
+assert.equal((await demo.api("POST", "/api/avisos", "", { texto: "tarde", cuando: "2020-01-01 10:00" })).error, "Pick a time in the future.");
 await demo.api("POST", "/api/settings", "", { accent: "#2563eb", inventada: 1 });
 assert.equal(demo.settings().accent, "#2563eb");
 assert.ok(!("inventada" in demo.settings()));
-// nada que parezca una cuenta se acepta
+// nothing that looks like an account is accepted
 for (const path of ["/api/mail/login", "/api/mail/send", "/api/setup/claude", "/api/setup/spotify", "/api/setup/whatsapp", "/api/web/accounts"]) {
   r = await demo.api("POST", path, "", { user: "a@example.com", password: "secreta" });
   assert.equal(r.ok, false, path);
 }
 assert.ok(!JSON.stringify(demo.S).includes("secreta"));
-// WhatsApp: solo escribe si se elige
+// WhatsApp: only writes if chosen
 const wa = demo.S.chats[0].jid;
 assert.equal((await demo.api("POST", "/api/whatsapp/send", "", { jid: wa, text: "hola" })).ok, false);
 await demo.api("POST", "/api/settings", "", { whatsapp_mode: "write" });
 assert.equal((await demo.api("POST", "/api/whatsapp/send", "", { jid: wa, text: "hola" })).ok, true);
 assert.equal((await demo.api("GET", "/api/whatsapp")).chats[0].mine, true);
-// cada GET del panel tiene respuesta
+// every panel GET has a response
 for (const path of fs.readFileSync(new URL("../web/hub/app.js", import.meta.url), "utf8").matchAll(/fetch\(["`](\/api\/[a-z/]+)/g)) {
   const p = path[1].replace(/\/$/, "/x");
   const got = await Promise.all(["GET", "POST"].map(m => demo.api(m, p)));
   assert.ok(got.every(g => g !== undefined), p);
 }
 
-// ---------- reparto de las tarjetas elegidas (web/hub/app.js) ----------
+// ---------- layout of the chosen cards (web/hub/app.js) ----------
 const app = fs.readFileSync(new URL("../web/hub/app.js", import.meta.url), "utf8");
 const cut = (from, to) => app.slice(app.indexOf(from), app.indexOf(to, app.indexOf(from)));
 const ctx = { structuredClone };
@@ -80,12 +82,12 @@ for (let n = 1; n <= ids.length; n++) {
   assert.equal(on.length, n);
   const cells = new Set();
   for (const w of on) for (let x = w.x; x < w.x + w.w; x++) for (let y = w.y; y < w.y + w.h; y++) cells.add(`${x},${y}`);
-  assert.equal(cells.size, 144, `${n} tarjetas llenan el tablero sin pisarse`);
+  assert.equal(cells.size, 144, `${n} cards fill the board without overlapping`);
   assert.ok(on.every(w => Number.isInteger(w.x) && Number.isInteger(w.w) && w.x + w.w <= 12 && w.y + w.h <= 12));
 }
 assert.deepEqual(layoutFor(["nada"]), layoutFor(undefined));
 
-// ---------- gestos ----------
+// ---------- gestures ----------
 const hand = (up, thumb = { x: 0.2, y: 0.5 }) => {
   const lm = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.9 }));
   lm[9] = { x: 0.5, y: 0.6 };

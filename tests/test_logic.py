@@ -1,4 +1,4 @@
-"""Pruebas de lógica pura: clasificación de gestos, órdenes del router, temporizadores y zonas de ventana."""
+"""Pure-logic tests: gesture classification, router commands, timers and window zones."""
 
 import math
 
@@ -11,8 +11,8 @@ from hub.listener import find_wake
 
 
 def _hand(finger_ratios: dict[int, float]) -> dict[int, tuple[float, float]]:
-    """Mano sintética: muñeca en (0,0); cada dedo (tip, mcp) a distancia 1.0 del origen en su propio ángulo.
-    finger_ratios[tip_idx] = distancia de la punta / distancia del mcp (la métrica que usa el detector)."""
+    """Synthetic hand: wrist at (0,0); each finger (tip, mcp) at distance 1.0 from the origin at its own angle.
+    finger_ratios[tip_idx] = tip distance / mcp distance (the metric the detector uses)."""
     pos = {0: (0.0, 0.0)}
     for i, (tip, mcp) in enumerate(zip([8, 12, 16, 20], [5, 9, 13, 17])):
         ang = i * 0.3
@@ -44,7 +44,7 @@ def test_peace_sign_is_index_and_middle_extended_only():
     det = GestureDetector()
     peace = {**FIST, 8: 2.0, 12: 2.0}
     assert det._detect_peace(_hand(peace))
-    assert not det._detect_peace(_hand(OPEN))   # ring y meñique extendidos: no es ✌
+    assert not det._detect_peace(_hand(OPEN))   # ring and pinky extended: not a ✌
     assert not det._detect_peace(_hand(FIST))
 
 
@@ -83,13 +83,13 @@ def test_whatsapp_only_sends_when_the_user_allowed_it(monkeypatch):
     wa = whatsapp.WhatsApp()
     wa.chats, wa.state = [{"jid": "1@s.whatsapp.net"}], "connected"
     monkeypatch.setattr(wa, "_owns_port", lambda: True)
-    assert wa.send("1@s.whatsapp.net", "hola")          # solo lectura
+    assert wa.send("1@s.whatsapp.net", "hola")          # read-only
     whatsapp.settings["whatsapp_mode"] = "write"
-    assert wa.send("2@s.whatsapp.net", "hola")          # chat desconocido
+    assert wa.send("2@s.whatsapp.net", "hola")          # unknown chat
     assert wa.send("1@s.whatsapp.net", "  ")
     assert wa.send("1@s.whatsapp.net", "x" * 4001)
     monkeypatch.setattr(wa, "_owns_port", lambda: False)
-    assert wa.send("1@s.whatsapp.net", "hola")          # el puerto es de otro puente
+    assert wa.send("1@s.whatsapp.net", "hola")          # the port belongs to another bridge
     assert posted == []
     monkeypatch.setattr(wa, "_owns_port", lambda: True)
     assert wa.send("1@s.whatsapp.net", " hola ") == ""

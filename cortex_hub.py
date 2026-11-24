@@ -1,10 +1,10 @@
-"""Cortex Hub: asistente de voz y panel (http://127.0.0.1:<ui_port>, 8765 de serie).
+"""Cortex Hub: voice assistant and panel (http://127.0.0.1:<ui_port>, 8765 by default).
 
-Los gestos son de Cortex Sense (sense.py, otro programa): Hub se conecta a ws://127.0.0.1:8766/ws y ejecuta
-los gestos con acción de Hub. Sin Sense, Hub funciona igual, solo que sin gestos.
+Gestures belong to Cortex Sense (sense.py, a separate program): Hub connects to ws://127.0.0.1:8766/ws and runs
+the gestures bound to Hub actions. Without Sense, Hub works the same, just without gestures.
 
-`--open` (accesos directos del instalador) abre el panel en el navegador. Si Cortex ya está en marcha, no se arranca otro.
-`CortexHub.exe --selftest` solo importa las librerías y los módulos (sin webcam, sin ventanas) y sale con 0 si todo carga.
+`--open` (installer shortcuts) opens the panel in the browser. If Cortex is already running, no second instance starts.
+`CortexHub.exe --selftest` only imports the libraries and modules (no webcam, no windows) and exits 0 if everything loads.
 """
 
 import os
@@ -15,43 +15,43 @@ from pathlib import Path
 ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 if getattr(sys, "frozen", False):
-    os.environ.setdefault("HF_HOME", str(ROOT / "models" / "hf"))   # que el modelo de voz se vaya al desinstalar
-    if sys.stdout is None or sys.stderr is None:   # sin consola: lo que se imprime, al registro
+    os.environ.setdefault("HF_HOME", str(ROOT / "models" / "hf"))   # so the voice model is removed on uninstall
+    if sys.stdout is None or sys.stderr is None:   # no console: write printed output to the log
         (ROOT / "logs").mkdir(exist_ok=True)
         _log = open(ROOT / "logs" / "console.log", "a", encoding="utf-8", buffering=1)
         sys.stdout, sys.stderr = sys.stdout or _log, sys.stderr or _log
 
 
 def selftest() -> int:
-    """Carga todo lo que usa la app sin abrir cámara ni ventanas. Imprime versiones y devuelve 0 si va bien."""
+    """Load everything the app uses without opening the camera or windows. Prints versions and returns 0 on success."""
     import importlib
     import importlib.util
     import platform
 
-    # hub.app se busca sin importarlo: al importarlo arranca el asistente (micro, modelos)
+    # hub.app is looked up without importing: importing it starts the assistant (mic, models)
     mods = ["numpy", "hub.config", "hub.sense_link", "websockets",
             "uvicorn", "faster_whisper", "onnx_asr", "openwakeword", "piper", "edge_tts", "sounddevice"]
     lazy = ["hub.app"]
     failed = []
-    print(f"Python {platform.python_version()} en {platform.platform()}")
+    print(f"Python {platform.python_version()} on {platform.platform()}")
     for name in mods:
         try:
             mod = importlib.import_module(name)
             print(f"  ok  {name} {getattr(mod, '__version__', '')}".rstrip())
-        except Exception as e:  # noqa: BLE001 - queremos ver cualquier fallo de carga
+        except Exception as e:  # noqa: BLE001 - we want to see any load failure
             failed.append(name)
-            print(f"  FALLO {name}: {type(e).__name__}: {e}")
+            print(f"  FAILED {name}: {type(e).__name__}: {e}")
     for name in lazy:
         if importlib.util.find_spec(name) is None:
             failed.append(name)
-        print(f"  {'ok' if name not in failed else 'FALLO'}  {name} (encontrado, sin importar)")
+        print(f"  {'ok' if name not in failed else 'FAILED'}  {name} (found, not imported)")
     oww = Path(importlib.util.find_spec("openwakeword").origin).parent / "resources" / "models"
     for f in (Path(importlib.util.find_spec("hub").origin).with_name("silero_vad.onnx"),
               oww / "melspectrogram.onnx", oww / "embedding_model.onnx"):
-        print(f"  {'ok' if f.exists() else 'FALTA'}  {f.name}")
+        print(f"  {'ok' if f.exists() else 'MISSING'}  {f.name}")
         if not f.exists():
             failed.append(f.name)
-    print("SELFTEST OK" if not failed else f"SELFTEST FALLO: {failed}")
+    print("SELFTEST OK" if not failed else f"SELFTEST FAILED: {failed}")
     return 0 if not failed else 1
 
 
@@ -72,8 +72,8 @@ def open_panel(port: int, wait: float = 60) -> None:
 
 
 def main() -> None:
-    # En el exe, sys.executable es CortexHub.exe: `-m hub.micmute` (audio.py) tiene que ejecutar solo ese módulo,
-    # o cada Hub arrancaría otro Hub sin fin.
+    # In the exe, sys.executable is CortexHub.exe: `-m hub.micmute` (audio.py) must run only that module,
+    # or every Hub would start another Hub endlessly.
     if sys.argv[1:3] == ["-m", "hub.micmute"]:
         from hub.micmute import main as run_micmute
         return run_micmute()
@@ -87,9 +87,9 @@ def main() -> None:
             open_panel(port)
         return
     from hub import main as run_assistant
-    import hub.app  # noqa: F401  (uvicorn lo carga por nombre; así PyInstaller lo empaqueta)
+    import hub.app  # noqa: F401  (uvicorn loads it by name; this way PyInstaller bundles it)
 
-    # Sin --open no abre ningún navegador: el panel queda en http://127.0.0.1:<ui_port>.
+    # Without --open no browser is opened: the panel stays at http://127.0.0.1:<ui_port>.
     if "--open" in sys.argv:
         threading.Thread(target=open_panel, args=(port,), daemon=True).start()
     run_assistant()

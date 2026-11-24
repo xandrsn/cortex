@@ -268,7 +268,7 @@ def _fill_monitor(hwnd: int,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(cap=None) -> None:
-    """cap: un lector de sense.camera.SharedCamera (Sense comparte la webcam con los gestos); sin él, abre la suya."""
+    """cap: a sense.camera.SharedCamera reader (Sense shares the webcam with the gestures); without it, opens its own."""
     global _threads_alive
 
     vx, vy, vw, vh = detect_virtual_desktop()

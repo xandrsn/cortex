@@ -1,7 +1,7 @@
-"""Cuentas de webs de vídeo (usuario y contraseña) para que Cortex inicie sesión solo.
+"""Video-site accounts (username and password) so Cortex can sign in on its own.
 
-Charlie las escribe en el panel (Ajustes → Vídeo). La contraseña va al Administrador de credenciales de Windows
-(cifrada con su usuario de Windows); aquí solo queda qué web y qué usuario, en secrets/ (fuera de Drive y de git).
+The user types them in the panel (Settings -> Video). The password goes to the Windows Credential Manager
+(encrypted with their Windows user); only the site and username are kept here, in secrets/ (outside Drive and git).
 """
 
 import json
@@ -32,21 +32,21 @@ def _load() -> dict[str, str]:
 
 
 def accounts() -> list[dict]:
-    """[{site, user}] (sin contraseñas): lo que enseña el panel."""
+    """[{site, user}] (no passwords): what the panel shows."""
     return [{"site": d, "user": u} for d, u in sorted(_load().items())]
 
 
 def save(site: str, user: str, password: str) -> str:
     domain = _domain(site)
     if "." not in domain or not user or not password:
-        raise ValueError("Falta la web, el usuario o la contraseña.")
+        raise ValueError("The site, username or password is missing.")
     with _lock:
         keyring.set_password(SERVICE.format(domain), user, password)
         data = _load()
         data[domain] = user
         INDEX.parent.mkdir(exist_ok=True)
         INDEX.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    log.info("Cuenta guardada para %s", domain)
+    log.info("Account saved for %s", domain)
     return domain
 
 
@@ -64,7 +64,7 @@ def delete(site: str) -> None:
 
 
 def get(host: str) -> tuple[str, str] | None:
-    """(usuario, contraseña) para esa web (o None)."""
+    """(username, password) for that site (or None)."""
     domain = _domain(host)
     user = _load().get(domain)
     if not user:

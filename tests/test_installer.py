@@ -1,4 +1,4 @@
-"""Lo que el instalador y el arranque del exe dan por hecho (sin abrir nada)."""
+"""What the installer and the exe startup take for granted (without opening anything)."""
 
 import re
 import subprocess
@@ -17,7 +17,7 @@ def test_installer_widgets_match_the_panel():
 
 
 def test_micmute_child_does_not_start_another_cortex():
-    """En el exe, audio.py lanza `CortexHub.exe -m hub.micmute`: si eso arrancara la app, se relanzaría sin fin."""
+    """In the exe, audio.py launches `CortexHub.exe -m hub.micmute`: if that started the app, it would relaunch endlessly."""
     code = ("import sys, types; sys.argv = ['CortexHub.exe', '-m', 'hub.micmute'];"
             "import cortex_hub; m = types.ModuleType('hub.micmute'); m.main = lambda: print('micmute');"
             "sys.modules['hub.micmute'] = m; cortex_hub.main();"

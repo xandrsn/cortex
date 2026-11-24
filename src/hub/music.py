@@ -1,15 +1,15 @@
-"""Órdenes de música resueltas en local (sin Claude): devuelve una intención o None."""
+"""Music commands resolved locally (without Claude): returns an intent or None."""
 
 import re
 
 from .spotify import norm
 
-# «pon un recordatorio», «pon la tele»… no son música
+# "pon un recordatorio", "pon la tele"... are not music
 NOT_MUSIC = re.compile(r"^(un|una|el|la|los|las)? ?(recordatorio|aviso|alarma|temporizador|tele|television|"
                        r"lavadora|luz|luces|nota|tarea|cita|evento|reminder|timer|alarm)\b")
 
 PATTERNS: list[tuple[str, str]] = [
-    # español
+    # Spanish and English
     (r"(pausa|pausala|para|paralo|parala|para la musica|pausa la musica|quita la musica|calla la musica|stop)", "pause"),
     (r"(sigue|continua|reanuda|dale al play|vuelve a poner la musica|pon la musica|play|resume|continue)", "resume"),
     (r"(siguiente|la siguiente|pasa|pasala|salta|saltala|siguiente cancion|pasa de cancion|cambia de cancion|"
@@ -55,14 +55,14 @@ def parse(text: str) -> dict | None:
             arg = m.group(1).strip()
             if intent == "query" and (NOT_MUSIC.match(arg) or len(arg) < 2):
                 return None
-            # «pon la playlist X» mantiene el nombre tal cual lo dijo (con mayúsculas y tildes)
+            # "pon la playlist X" keeps the name exactly as spoken (with capitals and accents)
             return {"intent": intent, "value": _original_tail(text, arg)}
         return {"intent": intent}
     return None
 
 
 def _original_tail(text: str, normalized_arg: str) -> str:
-    """Recupera el trozo original (con tildes) que corresponde al argumento normalizado."""
+    """Recovers the original chunk (with accents) that corresponds to the normalized argument."""
     words = text.strip(" .,!?¿¡").split()
     n = len(normalized_arg.split())
     tail = " ".join(words[-n:]) if n <= len(words) else normalized_arg

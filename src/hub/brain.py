@@ -1,9 +1,9 @@
-"""Puente con Claude Code en modo headless (`claude -p`) usando el plan del usuario.
+"""Bridge to Claude Code in headless mode (`claude -p`) using the user's plan.
 
-Un único proceso `claude -p --input-format stream-json` se queda abierto y precalentado; cada turno es
-una línea JSON por stdin. Así no se paga el arranque de Claude Code en cada pregunta. La conversación
-sigue en el mismo proceso hasta que pasan N minutos sin hablar o se pide una nueva; entonces se
-arranca otro proceso limpio. Si el proceso muere, se relanza con --resume para no perder el hilo.
+A single `claude -p --input-format stream-json` process stays open and warm; each turn is one JSON
+line on stdin, so Claude Code's startup cost is not paid on every question. The conversation continues in
+the same process until N minutes pass without talking or a new one is requested; then a clean process
+is started. If the process dies it is relaunched with --resume so the thread is not lost.
 """
 
 import collections
@@ -21,14 +21,14 @@ from typing import Callable
 
 from .config import ROOT, settings
 
-PLAN_FILE = ROOT / "logs" / "claude_plan.json"   # último uso del plan: el panel lo enseña nada más arrancar
+PLAN_FILE = ROOT / "logs" / "claude_plan.json"   # last plan usage: the dashboard shows it right at startup
 
 log = logging.getLogger("brain")
 
 TOOLS = "Read,Edit,Write,Glob,Grep,WebSearch,WebFetch"
-# conectores de la cuenta de claude.ai (Gmail y Calendar); con «dontAsk» lo que no esté aquí se deniega
+# connectors of the claude.ai account (Gmail and Calendar); with "dontAsk" anything not listed here is denied
 CONNECTORS = "mcp__claude_ai_Gmail,mcp__claude_ai_Google_Calendar"
-WA_MCP = ROOT / "whatsapp-mcp.json"   # servidor MCP de whatsapp-mcp para el cerebro
+WA_MCP = ROOT / "whatsapp-mcp.json"   # whatsapp-mcp MCP server for the brain
 WA_TOOLS = ",".join(f"mcp__whatsapp__{t}" for t in ("search_contacts", "list_messages", "list_chats", "get_chat",
                     "get_direct_chat_by_contact", "get_contact_chats", "get_last_interaction", "get_message_context"))
 BLOCKED = ("Bash,PowerShell,NotebookEdit,Agent,Task,CronCreate,CronDelete,RemoteTrigger,SendMessage,PushNotification,"
@@ -39,18 +39,18 @@ def _allowed() -> list[str]:
     if WA_MCP.exists():
         return ["--allowedTools", f"{TOOLS},{CONNECTORS},{WA_TOOLS}", "--mcp-config", str(WA_MCP)]
     return ["--allowedTools", f"{TOOLS},{CONNECTORS}"]
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 def claude_exe() -> str | None:
-    """El ejecutable de Claude Code. El instalador oficial lo deja en ~/.local/bin, que no está en el PATH de un
-    proceso arrancado antes de instalarlo."""
+    """The Claude Code executable. The official installer puts it in ~/.local/bin, which is not on the PATH of a
+    process started before installing it."""
     local = Path.home() / ".local" / "bin" / "claude.exe"
     return shutil.which("claude") or (str(local) if local.exists() else None)
 
 
 def claude_status() -> dict:
-    """¿Está Claude Code instalado y con sesión? (solo eso: ni correo ni organización)"""
+    """Is Claude Code installed and logged in? (only that: no email or organization)"""
     exe = claude_exe()
     if not exe:
         return {"installed": False, "logged": False}
@@ -64,10 +64,10 @@ def claude_status() -> dict:
 
 
 def claude_login() -> None:
-    """Abre una consola con el inicio de sesión oficial de Claude (lo pide el usuario con el botón)."""
+    """Open a console with the official Claude login (requested by the user with the button)."""
     exe = claude_exe()
     if not exe:
-        raise BrainError("start", "No encuentro el ejecutable de Claude Code")
+        raise BrainError("start", "Cannot find the Claude Code executable")
     subprocess.Popen([exe, "auth", "login"], creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 
@@ -83,20 +83,20 @@ class Brain:
         self.session_id: str | None = None
         self.last_turn = 0.0
         self.turns = 0
-        self.plan: dict = {}          # último rate_limit_event (uso del plan)
+        self.plan: dict = {}          # last rate_limit_event (plan usage)
         try:
             self.plan = json.loads(PLAN_FILE.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
-        self.ok: bool | None = None   # None = sin probar todavía
+        self.ok: bool | None = None   # None = not tested yet
         self._proc: subprocess.Popen | None = None
         self._model = None
         self._events: queue.Queue = queue.Queue()
-        self._lock = threading.Lock()       # un turno a la vez
-        self._proc_lock = threading.Lock()  # arrancar/parar el proceso
+        self._lock = threading.Lock()       # one turn at a time
+        self._proc_lock = threading.Lock()  # start/stop the process
         self._interrupted = False
 
-    # ---------- proceso ----------
+    # ---------- process ----------
     def _command(self, resume: str | None) -> list[str]:
         exe = claude_exe()
         if not exe:
@@ -112,7 +112,7 @@ class Brain:
         return cmd
 
     def start(self, resume: str | None = None) -> None:
-        """Arranca (o rearranca) el proceso. Sin resume, la conversación empieza de cero."""
+        """Start (or restart) the process. Without resume the conversation starts from scratch."""
         with self._proc_lock:
             self._stop_locked()
             self._events = queue.Queue()
@@ -125,7 +125,7 @@ class Brain:
             if not resume:
                 self.turns = 0
             threading.Thread(target=self._reader, args=(self._proc, self._events), daemon=True).start()
-            log.info("Claude arrancado (%s, %s)", self._model, "continúa" if resume else "conversación nueva")
+            log.info("Claude started (%s, %s)", self._model, "continuing" if resume else "new conversation")
 
     def _stop_locked(self) -> None:
         if self._proc and self._proc.poll() is None:
@@ -146,8 +146,8 @@ class Brain:
 
     @staticmethod
     def _reader(proc: subprocess.Popen, events: queue.Queue) -> None:
-        # stderr se vacía a la vez en otro hilo: si se llenara su tubería (avisos repetidos), Claude se
-        # quedaría bloqueado escribiendo y dejaría de contestar
+        # stderr is drained at the same time in another thread: if its pipe filled up (repeated warnings),
+        # Claude would block writing and stop answering
         tail: collections.deque = collections.deque(maxlen=200)
 
         def drain():
@@ -172,12 +172,12 @@ class Brain:
         self.start()
 
     def maintain(self) -> None:
-        """Llamado de vez en cuando: conversación nueva tras el tiempo de inactividad, o si cambió el modelo."""
+        """Called now and then: new conversation after the idle time, or if the model changed."""
         if self._lock.locked():
             return
         idle = self.turns and time.time() - self.last_turn > settings["session_idle_minutes"] * 60
         if idle:
-            log.info("Conversación nueva por inactividad")
+            log.info("New conversation due to inactivity")
             self.start()
         elif self._model != settings["claude_model"] or not self._alive():
             self.start(self.session_id)
@@ -193,14 +193,14 @@ class Brain:
             self._proc.stdin.write((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
             self._proc.stdin.flush()
         except (OSError, AttributeError) as e:
-            raise BrainError("crash", f"Se ha caído la conexión con Claude: {e}") from e
+            raise BrainError("crash", f"The connection to Claude dropped: {e}") from e
 
-    # ---------- turnos ----------
+    # ---------- turns ----------
     def ask(self, text: str, lang: str, channel: str, on_delta: Callable[[str], None],
             on_tool: Callable[[str], None]) -> str:
-        """Bloqueante. Llama a on_delta con cada trozo de texto y on_tool al empezar a usar una herramienta.
+        """Blocking. Calls on_delta with each text chunk and on_tool when a tool starts being used.
 
-        Lanza BrainError con un mensaje legible si algo falla.
+        Raises BrainError with a readable message if something fails.
         """
         with self._lock:
             if self.turns and time.time() - self.last_turn > settings["session_idle_minutes"] * 60:
@@ -209,9 +209,9 @@ class Brain:
                 self.start(self.session_id)
             self._interrupted = False
             now = datetime.now()
-            # recordatorio en cada mensaje: con el CLAUDE.md solo, en conversaciones largas se alarga
-            brief = "máx. 2 frases cortas" if channel == "voz" else "máx. 3 líneas"
-            header = f"[{DAYS[now.weekday()]} {now:%d/%m/%Y %H:%M} · canal: {channel} · {brief}]\n"
+            # reminder on every message: with CLAUDE.md alone, replies grow longer in long conversations
+            brief = "max. 2 short sentences" if channel == "voz" else "max. 3 lines"
+            header = f"[{DAYS[now.weekday()]} {now:%d/%m/%Y %H:%M} · channel: {channel} · {brief}]\n"
             log.info("Claude ← %s", text)
             self._send({"type": "user", "message": {"role": "user", "content": header + text}})
 
@@ -222,7 +222,7 @@ class Brain:
                 except queue.Empty:
                     self.ok = False
                     self.start(self.session_id)
-                    raise BrainError("timeout", "Claude no contesta. Lo he reiniciado, prueba otra vez.")
+                    raise BrainError("timeout", "Claude is not responding. I restarted it, try again.")
                 kind = event.get("type")
                 if kind == "stream_event" and event.get("parent_tool_use_id") is None:
                     ev = event["event"]
@@ -235,7 +235,7 @@ class Brain:
                         if block.get("type") == "tool_use":
                             on_tool(block.get("name", ""))
                         elif block.get("type") == "text" and full and not full.endswith("\n"):
-                            # texto nuevo tras usar una herramienta: que no se pegue a la frase anterior
+                            # new text after using a tool: do not glue it to the previous sentence
                             full += "\n"
                             on_delta("\n")
                 elif kind == "system" and event.get("subtype") == "init":
@@ -250,21 +250,21 @@ class Brain:
                     result = event
                 elif kind == "_exit":
                     self.ok = False
-                    log.error("Claude salió con %s: %s", event["code"], event["stderr"][-500:])
+                    log.error("Claude exited with %s: %s", event["code"], event["stderr"][-500:])
                     self._proc = None
                     if self._limit_hit(event["stderr"]):
                         raise BrainError("limit", self._limit_message())
-                    raise BrainError("crash", "Claude se ha caído. Mira los logs.")
+                    raise BrainError("crash", "Claude crashed. Check the logs.")
 
             if self._interrupted:
-                raise BrainError("cancelled", "Cancelado")
+                raise BrainError("cancelled", "Cancelled")
             if result.get("is_error"):
                 self.ok = False
-                msg = result.get("result") or result.get("subtype") or "error desconocido"
-                log.error("Claude devolvió error: %s", msg)
+                msg = result.get("result") or result.get("subtype") or "unknown error"
+                log.error("Claude returned an error: %s", msg)
                 if self._limit_hit(msg):
                     raise BrainError("limit", self._limit_message())
-                raise BrainError("error", f"Claude ha dado un error: {str(msg)[:200]}")
+                raise BrainError("error", f"Claude returned an error: {str(msg)[:200]}")
 
             self.ok = True
             self.session_id = result.get("session_id", self.session_id)
@@ -278,12 +278,12 @@ class Brain:
     def _limit_message(self) -> str:
         resets = self.plan.get("resetsAt")
         if resets:
-            return f"Me he quedado sin plan de Claude hasta las {datetime.fromtimestamp(resets):%H:%M}."
-        return "Me he quedado sin plan de Claude por ahora."
+            return f"I have run out of Claude plan until {datetime.fromtimestamp(resets):%H:%M}."
+        return "I have run out of Claude plan for now."
 
 
 def one_shot(prompt: str, timeout: float = 420) -> str:
-    """Una consulta suelta, aparte de la conversación (para la actualización automática). Devuelve el texto."""
+    """A standalone query, separate from the conversation (for the automatic update). Returns the text."""
     exe = claude_exe()
     if not exe:
         raise BrainError("start", "No encuentro el ejecutable de Claude Code")
@@ -293,5 +293,5 @@ def one_shot(prompt: str, timeout: float = 420) -> str:
     r = subprocess.run(cmd, cwd=settings["data_dir"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                        timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW)
     if r.returncode != 0:
-        raise BrainError("result", (r.stdout or r.stderr or "falló").strip()[:200])
+        raise BrainError("result", (r.stdout or r.stderr or "failed").strip()[:200])
     return r.stdout.strip()

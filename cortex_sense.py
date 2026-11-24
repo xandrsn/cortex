@@ -1,10 +1,10 @@
-"""Cortex Sense: gestos de la webcam → comandos. Panel en http://127.0.0.1:8766.
+"""Cortex Sense: webcam gestures → commands. Panel at http://127.0.0.1:8766.
 
-La visión (gestos, mirada) y el servidor corren en hilos; el control de ventanas con pellizco necesita la
-ventana de pygame y corre en el hilo principal. Los dos leen la misma webcam (sense.camera.SharedCamera).
+Vision (gestures, gaze) and the server run in threads; pinch-based window control needs the
+pygame window and runs in the main thread. Both read the same webcam (sense.camera.SharedCamera).
 
-`--open` abre el panel en el navegador. Si Sense ya está en marcha, no se arranca otro.
-`CortexSense.exe --selftest` solo importa librerías y modelos (sin webcam ni ventanas) y sale con 0 si todo carga.
+`--open` opens the panel in the browser. If Sense is already running, no second instance starts.
+`CortexSense.exe --selftest` only imports libraries and models (no webcam, no windows) and exits 0 if everything loads.
 """
 
 import os
@@ -16,7 +16,7 @@ from pathlib import Path
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-if getattr(sys, "frozen", False) and (sys.stdout is None or sys.stderr is None):   # sin consola: al registro
+if getattr(sys, "frozen", False) and (sys.stdout is None or sys.stderr is None):   # no console: write to the log
     (ROOT / "logs").mkdir(exist_ok=True)
     _log = open(ROOT / "logs" / "sense-console.log", "a", encoding="utf-8", buffering=1)
     sys.stdout, sys.stderr = sys.stdout or _log, sys.stderr or _log
@@ -32,19 +32,19 @@ def selftest() -> int:
         try:
             mod = importlib.import_module(name)
             print(f"  ok  {name} {getattr(mod, '__version__', '')}".rstrip())
-        except Exception as e:  # noqa: BLE001 - queremos ver cualquier fallo de carga
+        except Exception as e:  # noqa: BLE001 - we want to see any load failure
             failed.append(name)
-            print(f"  FALLO {name}: {type(e).__name__}: {e}")
-    for name in ["sense.app", "sense.window.main"]:   # se buscan sin importar: importarlos arranca cosas
+            print(f"  FAILED {name}: {type(e).__name__}: {e}")
+    for name in ["sense.app", "sense.window.main"]:   # looked up without importing: importing them starts things
         ok = importlib.util.find_spec(name) is not None
         failed += [] if ok else [name]
-        print(f"  {'ok' if ok else 'FALLO'}  {name} (encontrado, sin importar)")
+        print(f"  {'ok' if ok else 'FAILED'}  {name} (found, not imported)")
     from sense.config import WEB_DIR
     from sense.window import hand_tracker
     for f in (Path(hand_tracker._MODEL_PATH), WEB_DIR / "index.html"):
-        print(f"  {'ok' if f.exists() else 'FALTA'}  {f}")
+        print(f"  {'ok' if f.exists() else 'MISSING'}  {f}")
         failed += [] if f.exists() else [f.name]
-    print("SELFTEST OK" if not failed else f"SELFTEST FALLO: {failed}")
+    print("SELFTEST OK" if not failed else f"SELFTEST FAILED: {failed}")
     return 0 if not failed else 1
 
 
@@ -76,20 +76,20 @@ def main() -> None:
     from sense.app import serve, sense
 
     server = serve(port)
-    if "--open" in sys.argv or not settings["setup_done"]:   # la primera vez, al asistente de instalación
+    if "--open" in sys.argv or not settings["setup_done"]:   # the first time, open the setup wizard
         threading.Thread(target=open_panel, args=(port,), daemon=True).start()
     if settings["window_gestures"]:
         from sense.window import config as wcfg
         wcfg.GRAB_THRESHOLD, wcfg.RELEASE_THRESHOLD = settings["pinch_grab"], settings["pinch_release"]
         cap = sense.reader(int(settings["camera_index"]))
         if cap is None:
-            print("Control de ventanas desactivado: no se pudo abrir la cámara")
+            print("Window control disabled: could not open the camera")
         else:
             try:
                 from sense.window.main import main as run_windows
                 run_windows(cap)
             except SystemExit as e:
-                print(f"Control de ventanas desactivado: {e}")
+                print(f"Window control disabled: {e}")
     server.join()
 
 

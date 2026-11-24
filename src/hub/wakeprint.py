@@ -1,9 +1,9 @@
-"""Huella acústica de «Cortex»: compara lo que se oye con grabaciones de la propia palabra.
+"""Acoustic print of "Cortex": compares what is heard with recordings of the word itself.
 
-Usa los modelos de openWakeWord (espectrograma + embeddings de voz de Google, pensados para palabras de
-activación con pocos ejemplos) y DTW de subsecuencia: busca el trozo del audio que más se parece a
-alguna plantilla. Las plantillas son las muestras que graba el usuario desde Ajustes (en
-C:la carpeta del programa\\wake, fuera de Drive) y, de base, unas cuantas voces sintéticas.
+Uses the openWakeWord models (spectrogram + Google speech embeddings, designed for wake words with few
+examples) and subsequence DTW: it looks for the part of the audio most similar to any template. The
+templates are the samples the user records from Settings (in the program folder under wake_cortex, outside
+Drive) plus a few synthetic voices as a base.
 """
 
 import asyncio
@@ -21,17 +21,17 @@ log = logging.getLogger("wakeprint")
 SAMPLES_DIR = ROOT / "wake_cortex"
 DEFAULTS_DIR = MODELS_DIR / "wake_cortex_default"
 RATE = 16000
-PAD = 4000                 # 0,25 s de silencio a cada lado (el modelo mira ventanas de 0,775 s)
+PAD = 4000                 # 0.25 s of silence on each side (the model looks at 0.775 s windows)
 FRAME_S = 0.08
 WINDOW_S = 0.775
-# Distancia máxima para dar por buena la palabra, según la sensibilidad (1 baja · 2 media · 3 alta)
+# Maximum distance to accept the word, by sensitivity (1 low · 2 medium · 3 high)
 THRESHOLDS = {1: 0.10, 2: 0.13, 3: 0.16}
 DEFAULT_VOICES = [("es-ES-AlvaroNeural", "+0%"), ("es-ES-AlvaroNeural", "+15%"), ("es-ES-ElviraNeural", "+0%"),
                   ("es-ES-ElviraNeural", "-10%"), ("es-MX-JorgeNeural", "+0%"), ("es-ES-XimenaNeural", "+10%")]
 
 
 def trim(audio: np.ndarray, margin: float = 0.08) -> np.ndarray:
-    """Recorta el silencio de los extremos por energía."""
+    """Trim silence from both ends by energy."""
     frame = 320
     if len(audio) < frame * 3:
         return audio
@@ -71,7 +71,7 @@ class WakePrint:
         self._ensure_defaults()
         self.reload()
 
-    # ---------- plantillas ----------
+    # ---------- templates ----------
     def _ensure_defaults(self) -> None:
         DEFAULTS_DIR.mkdir(parents=True, exist_ok=True)
         if any(DEFAULTS_DIR.glob("*.wav")):
@@ -90,9 +90,9 @@ class WakePrint:
 
             for i, (voice, rate) in enumerate(DEFAULT_VOICES):
                 _write_wav(DEFAULTS_DIR / f"{i}.wav", asyncio.run(make(voice, rate)))
-            log.info("Plantillas base de «Cortex» generadas")
+            log.info("Base \"Cortex\" templates generated")
         except Exception as e:
-            log.warning("No pude generar las plantillas base: %s", e)
+            log.warning("Could not generate the base templates: %s", e)
 
     def reload(self) -> None:
         user = sorted(SAMPLES_DIR.glob("*.wav"))
@@ -115,7 +115,7 @@ class WakePrint:
             f.unlink()
         self.reload()
 
-    # ---------- comparación ----------
+    # ---------- comparison ----------
     def embed(self, audio: np.ndarray) -> np.ndarray:
         padded = np.concatenate([np.zeros(PAD, np.float32), audio.astype(np.float32), np.zeros(PAD, np.float32)])
         if len(padded) < RATE:
@@ -126,7 +126,7 @@ class WakePrint:
 
     @staticmethod
     def _subsequence_dtw(q: np.ndarray, s: np.ndarray) -> tuple[float, int, int]:
-        """Mejor encaje de q dentro de s: (distancia media, frame inicial, frame final) en s."""
+        """Best fit of q inside s: (mean distance, start frame, end frame) in s."""
         cost = 1 - q @ s.T
         n, m = cost.shape
         acc = np.full((n + 1, m + 1), np.inf)
@@ -139,14 +139,14 @@ class WakePrint:
                 k = int(np.argmin(options))
                 acc[i, j] = cost[i - 1, j - 1] + options[k]
                 if i == 1 and k != 1:
-                    start[i, j] = j - 1          # el encaje empieza aquí
+                    start[i, j] = j - 1          # the match starts here
                 else:
                     start[i, j] = (start[i - 1, j], start[i, j - 1], start[i - 1, j - 1])[k]
         end = int(np.argmin(acc[n, 1:])) + 1
         return float(acc[n, end] / n), int(start[n, end]), end - 1
 
     def match(self, audio: np.ndarray) -> tuple[float, float, float]:
-        """(distancia, inicio s, fin s) del trozo que más se parece a «Cortex»."""
+        """(distance, start s, end s) of the part that most resembles "Cortex"."""
         with self._lock:
             templates = list(self._templates)
         if not templates:

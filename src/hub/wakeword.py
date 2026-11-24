@@ -1,7 +1,7 @@
-"""Detector de «Cortex» entrenado a medida (tools/train_wake.py): escucha la palabra continuamente.
+"""Custom-trained "Cortex" detector (tools/train_wake.py): listens for the word continuously.
 
-Usa los embeddings de openWakeWord (uno cada 80 ms) y una red pequeña entrenada con miles de «Cortex»
-sintéticos y las grabaciones de Charlie. No transcribe nada: salta en cuanto acaba la palabra.
+Uses openWakeWord embeddings (one every 80 ms) and a small network trained on thousands of synthetic
+"Cortex" clips and the user's recordings. It transcribes nothing: it fires as soon as the word ends.
 """
 
 import collections
@@ -17,9 +17,9 @@ from .config import MODELS_DIR, settings
 log = logging.getLogger("wakeword")
 
 MODEL_FILE = MODELS_DIR / "cortex_wake.npz"
-REAL_DIR = MODELS_DIR / "wake_train_cortex"   # activaciones reales: pos_real (luego hablaste) y neg_real (falsas)
+REAL_DIR = MODELS_DIR / "wake_train_cortex"   # real activations: pos_real (you spoke afterwards) and neg_real (false ones)
 KEEP_REAL = 300
-# Umbral de la red según la sensibilidad (1 baja · 2 media · 3 alta)
+# Network threshold by sensitivity (1 low · 2 medium · 3 high)
 THRESHOLDS = {1: 0.95, 2: 0.85, 3: 0.7}
 COOLDOWN_S = 2.0
 
@@ -27,35 +27,35 @@ COOLDOWN_S = 2.0
 class WakeWord:
     def __init__(self):
         self.available = MODEL_FILE.exists()
-        self._recent = collections.deque(maxlen=int(2.0 * 16000 / 512) + 1)   # ~2 s de audio
+        self._recent = collections.deque(maxlen=int(2.0 * 16000 / 512) + 1)   # ~2 s of audio
         self._fired_clip = None
         self.fire_score = 0.0
         self.last_score = 0.0
         self._last_fire = -1e9
-        self._clock = 0.0   # segundos de audio procesado: el cooldown va por audio, no por reloj
+        self._clock = 0.0   # seconds of audio processed: the cooldown follows audio, not the clock
         self._thresholds = dict(THRESHOLDS)
         self._consec = 1
         self._streak = 0
         if not self.available:
-            log.info("Sin modelo de «Cortex» entrenado; se usa el método por transcripción")
+            log.info("No trained \"Cortex\" model; using the transcription method")
             return
         from openwakeword.utils import AudioFeatures
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self._features = AudioFeatures(ncpu=1)
-        # openWakeWord guarda 10 s de audio crudo y lo convierte entero a lista cada 80 ms, aunque solo usa
-        # los últimos 1280 + 480: con un búfer corto da lo mismo y gasta un tercio menos de CPU
+        # openWakeWord keeps 10 s of raw audio and converts all of it to a list every 80 ms, though it only uses
+        # the last 1280 + 480: with a short buffer the result is the same and it uses a third less CPU
         self._features.raw_data_buffer = collections.deque(maxlen=1280 * 2 + 480)
         m = np.load(MODEL_FILE)
         self._mean, self._std = m["mean"], m["std"]
-        # umbrales elegidos al entrenar (por falsas alarmas/hora) y regla de N ventanas seguidas
+        # thresholds chosen at training time (by false alarms/hour) and a rule of N consecutive windows
         if "thresholds" in m.files:
             self._thresholds = {i + 1: float(t) for i, t in enumerate(m["thresholds"])}
         self._consec = int(m["consec"]) if "consec" in m.files else 1
         n = len([k for k in m.files if k.startswith("W")])
         self._layers = [(m[f"W{i}"], m[f"b{i}"]) for i in range(n)]
         self._buf = np.zeros(0, dtype=np.float32)
-        log.info("Detector de «Cortex» cargado")
+        log.info("\"Cortex\" detector loaded")
 
     def score(self, emb: np.ndarray) -> float:
         x = (emb.reshape(-1) - self._mean) / self._std
@@ -66,11 +66,11 @@ class WakeWord:
         return float(1 / (1 + np.exp(-x[0])))
 
     def process(self, chunk: np.ndarray) -> bool:
-        """chunk: audio float32 a 16 kHz (cualquier tamaño). True si acaba de oír «Cortex»."""
+        """chunk: float32 audio at 16 kHz (any size). True if it just heard "Cortex"."""
         self._recent.append(chunk)
         self._clock += len(chunk) / 16000
         self._buf = np.concatenate([self._buf, chunk])
-        if len(self._buf) < 1280:   # un embedding nuevo cada 1280 muestras (80 ms)
+        if len(self._buf) < 1280:   # a new embedding every 1280 samples (80 ms)
             return False
         block, self._buf = self._buf[:1280], self._buf[1280:]
         self._features((np.clip(block, -1, 1) * 32767).astype(np.int16))
@@ -83,12 +83,12 @@ class WakeWord:
             self._last_fire = now
             self._fired_clip = np.concatenate(self._recent)
             self.fire_score = s
-            log.info("¡Cortex! (detector, %.2f)", s)
+            log.info("Cortex! (detector, %.2f)", s)
             return True
         return False
 
     def verdict(self, real: bool) -> None:
-        """Tras una activación: ¿iba en serio (hubo orden) o fue falsa? Se guarda para reentrenar."""
+        """After an activation: was it real (a command followed) or false? Saved for retraining."""
         clip, self._fired_clip = self._fired_clip, None
         if clip is None:
             return
@@ -103,7 +103,7 @@ class WakeWord:
             for old in sorted(folder.glob("*.wav"))[:-KEEP_REAL]:
                 old.unlink(missing_ok=True)
         except OSError as e:
-            log.warning("No pude guardar la activación: %s", e)
+            log.warning("Could not save the activation: %s", e)
 
     @property
     def fired_clip(self):

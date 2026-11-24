@@ -1,16 +1,15 @@
-"""Oído siempre activo: detección de voz (Silero) + palabra de activación.
+"""Always-on listener: voice detection (Silero) + wake word.
 
-En reposo, cada vez que alguien habla se corta ese trozo y se decide si va dirigido a Cortex con dos
-pistas:
-1. Texto: se transcribe (Parakeet, ~0,3 s) y se busca «Cortex» comparando por cómo suena, no por cómo
-   se escribe («Kortecs» y «Cortex» suenan igual).
-2. Sonido: si el texto no lo dice, se compara el audio con las grabaciones de «Cortex» (wakeprint).
+At rest, every time someone speaks that chunk is cut out and two clues decide whether it is addressed to Cortex:
+1. Text: it is transcribed (Parakeet, ~0.3 s) and "Cortex" is searched by how it sounds, not how it is
+   spelled ("Kortecs" and "Cortex" sound the same).
+2. Sound: if the text does not say it, the audio is compared with the recordings of "Cortex" (wakeprint).
 
-Si aparece entre las primeras palabras o al final, lo que venga con él es la orden («Cortex, pon
-música»); si solo se dijo «Cortex», pasa a escucha activa.
+If it appears among the first words or at the end, whatever comes with it is the command ("Cortex, pon
+música"); if only "Cortex" was said, it switches to active listening.
 
-En escucha activa (tras el botón o un «Cortex» a secas) se graba hasta que el usuario se calla y se
-entrega el audio.
+In active listening (after the button or a bare "Cortex") it records until the user stops talking and
+hands over the audio.
 """
 
 import collections
@@ -37,18 +36,18 @@ from .wakeword import WakeWord
 log = logging.getLogger("listener")
 
 RATE = 16000
-SURE_SCORE = 0.995          # por encima, el detector no necesita segunda opinión
-CHUNK = 512                  # 32 ms, lo que espera Silero v5
+SURE_SCORE = 0.995          # above this, the detector needs no second opinion
+CHUNK = 512                  # 32 ms, what Silero v5 expects
 CHUNK_S = CHUNK / RATE
 CONTEXT = 64
 
-# Claves fonéticas que cuentan como «Cortex» con sensibilidad media (ver _phonetic)
+# Phonetic keys that count as "Cortex" at medium sensitivity (see _phonetic)
 WAKE_KEYS = {"cortex", "kortex", "qortex", "qoartex", "cortecs", "corteks", "kortecs", "korteks", "cortec", "kortek",
              "cortek", "coretex", "cordex", "cortix"}
-# con sensibilidad alta tiene que acabar como suena: si no, saltaría con «corte», «cortes» o «corto»
+# at high sensitivity it must end the way it sounds: otherwise it would fire on "corte", "cortes" or "corto"
 WAKE_SHAPE = re.compile(r"[ckgq][a-z]{2,5}(?:x|[ck]s?)")
 VAD_THRESHOLD = {1: 0.6, 2: 0.5, 3: 0.4}
-SPEC_AFTER = 0.3   # s de silencio tras los que se empieza a transcribir «por si acaso» (el corte es a los 0,7)
+SPEC_AFTER = 0.3   # s of silence after which it starts transcribing "just in case" (the cut is at 0.7)
 
 
 class SileroVad:
@@ -78,7 +77,7 @@ def _norm(word: str) -> str:
 
 
 def _phonetic(word: str) -> str:
-    """Clave de cómo suena: «Korthex» → «kortex»."""
+    """Key for how it sounds: "Korthex" -> "kortex"."""
     w = word.replace("ph", "f").replace("ee", "i").replace("ea", "i").replace("oo", "o").replace("ou", "o")
     w = w.replace("h", "").translate(str.maketrans("bvyu", "ppio"))
     return re.sub(r"(.)\1+", r"\1", w)
@@ -95,14 +94,14 @@ def _edit_distance(a: str, b: str) -> int:
 
 
 def find_wake(text: str, sensitivity: int) -> str | None:
-    """Si el texto va dirigido a Cortex devuelve la orden que lo acompaña ("" si no hay); si no, None."""
+    """If the text is addressed to Cortex return the accompanying command ("" if none); otherwise None."""
     spans = [m.span() for m in re.finditer(r"[^\W_]+(?:'[^\W_]+)?", text)]
     keys = [_phonetic(_norm(text[a:b])) for a, b in spans]
-    # «cor tex», «core tex»: une parejas de palabras
+    # "cor tex", "core tex": join pairs of words
     joined = [_phonetic(keys[i] + keys[i + 1]) if i + 1 < len(keys) else "" for i in range(len(keys))]
 
     def is_wake(i: int) -> int:
-        """Cuántas palabras ocupa la palabra de activación en la posición i (0 si no está)."""
+        """How many words the wake word takes at position i (0 if absent)."""
         for candidate, size in ((keys[i], 1), (joined[i], 2)):
             if not candidate:
                 continue
@@ -139,21 +138,21 @@ class Listener:
         self.print = WakePrint()
         self.detector = WakeWord()
         self.active = False
-        self.last_heard: dict = {}   # última frase oída en reposo, solo para el panel (no se guarda)
+        self.last_heard: dict = {}   # last phrase heard at rest, only for the dashboard (not stored)
         self._finish = False
         self._active_since = 0.0
         self._timeout = 6.0
-        # transcripción especulativa: al notar una pausa se transcribe ya; si la frase acaba ahí, el texto
-        # está listo cuando se da por terminada (ahorra lo que tarda Parakeet, ~0,3-0,5 s)
+        # speculative transcription: on noticing a pause it transcribes right away; if the sentence ends there,
+        # the text is ready when it is declared finished (saves Parakeet's latency, ~0.3-0.5 s)
         self._pool = concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="stt-spec")
         self._spec: tuple[int, concurrent.futures.Future] | None = None
         self._reset()
         threading.Thread(target=self._run, daemon=True, name="listener").start()
 
-    # ---------- control (desde el orquestador) ----------
+    # ---------- control (from the orchestrator) ----------
     def activate(self, timeout: float = 6.0):
-        """Escucha activa: si en `timeout` segundos no empieza a hablar, se rinde."""
-        if not (self.active and self._in_speech):   # tras el detector puede que ya esté hablando: no cortar
+        """Active listening: gives up if speech does not start within `timeout` seconds."""
+        if not (self.active and self._in_speech):   # after the detector the user may already be speaking: do not cut
             self._reset()
         self._finish = False
         self._active_since = time.monotonic()
@@ -170,7 +169,7 @@ class Listener:
         self.active = False
         self._reset()
 
-    # ---------- bucle ----------
+    # ---------- loop ----------
     def _reset(self):
         self._preroll = collections.deque(maxlen=10)
         self._segment: list[np.ndarray] = []
@@ -191,7 +190,7 @@ class Listener:
                 block = None
             now = time.monotonic()
             if block is None or now - last_block > 0.3:
-                # micro silenciado (Cortex hablando) o sin datos: lo que hubiera a medias no vale
+                # mic muted (Cortex speaking) or no data: anything half-captured is void
                 if not self.active and (self._in_speech or self._segment):
                     self._reset()
                     self.vad.reset()
@@ -199,7 +198,7 @@ class Listener:
                 try:
                     self._check_active_timeout(now)
                 except Exception:
-                    log.exception("Error en el oído")
+                    log.exception("Error in the listener")
                 continue
             last_block = now
             buf = np.concatenate([buf, block])
@@ -210,8 +209,8 @@ class Listener:
                     if detect and self.detector.process(chunk):
                         self._detector_wake()
                         continue
-                    # en reposo con detector (o sin palabra de activación) los trozos de voz no se usan:
-                    # sin Silero se ahorra CPU; al volver a hacer falta empieza de cero
+                    # at rest with the detector (or without a wake word) voice chunks are not used:
+                    # skipping Silero saves CPU; when needed again it starts from scratch
                     if not (self.active or (settings["wake_enabled"] and not self.detector.available)):
                         if vad_live:
                             vad_live = False
@@ -221,12 +220,12 @@ class Listener:
                     vad_live = True
                     self._step(chunk, self.vad(chunk))
                 except Exception:
-                    log.exception("Error en el oído")
+                    log.exception("Error in the listener")
                     self._reset()
             try:
                 self._check_active_timeout(now)
             except Exception:
-                log.exception("Error en el oído")
+                log.exception("Error in the listener")
 
     def _check_active_timeout(self, now: float):
         if not self.active:
@@ -234,7 +233,7 @@ class Listener:
         if not self._in_speech and (self._finish or now - self._active_since > self._timeout):
             self.active = False
             self._reset()
-            self.detector.verdict(real=False)   # se activó y no dijiste nada: probable falsa alarma
+            self.detector.verdict(real=False)   # it activated and you said nothing: probably a false alarm
             self.on_timeout()
 
     def _step(self, chunk: np.ndarray, prob: float):
@@ -252,7 +251,7 @@ class Listener:
         self._segment.append(chunk)
         self._silence = self._silence + 1 if prob < threshold - 0.15 else 0
         if self._silence == 0:
-            self._spec = None   # sigue hablando: lo especulado ya no vale
+            self._spec = None   # still talking: the speculation is void
         elif (self.active and self._spec is None and self._silence * CHUNK_S >= SPEC_AFTER
               and len(self._segment) * CHUNK_S >= 0.5):
             n = len(self._segment)
@@ -274,7 +273,7 @@ class Listener:
                 self._check_wake(audio)
 
     def _verify(self) -> tuple[bool, str]:
-        """Segunda opinión cuando el detector no está muy seguro: transcripción o huella de voz deben estar de acuerdo."""
+        """Second opinion when the detector is unsure: the transcription or the voice print must agree."""
         score, clip = self.detector.fire_score, self.detector.fired_clip
         if score >= SURE_SCORE or clip is None:
             return True, ""
@@ -287,13 +286,13 @@ class Listener:
         return dist <= self.print.threshold(sens) + 0.04, text
 
     def _detector_wake(self):
-        """El detector ha oído «Cortex»: la orden se graba ya, sin esperar a que acabe la frase."""
+        """The detector heard "Cortex": the command is recorded right away, without waiting for the sentence to end."""
         t = time.monotonic()
         ok, text = self._verify()
         self.last_heard = {"text": text or "Cortex", "distance": round(self.detector.fire_score, 2), "wake": ok,
                            "time": time.time()}
         if not ok:
-            log.info("Detector descartado por la segunda opinión (%.2f, %r, %.2fs)", self.detector.fire_score, text,
+            log.info("Detector rejected by the second opinion (%.2f, %r, %.2fs)", self.detector.fire_score, text,
                      time.monotonic() - t)
             self.detector.discard()
             return
@@ -314,20 +313,20 @@ class Listener:
         text, lang = self.stt.transcribe(audio, settings["notice_language"])
         rest = find_wake(text, sens) if text else None
         dist, start, end = self.print.match(audio)
-        how = "texto"
+        how = "text"
         if rest is None:
             limit = self.print.threshold(sens) + (0.03 if self.print.user_samples < 3 else 0.0)
             if dist <= limit:
-                how = "sonido"
+                how = "sound"
                 rest = self._split_command(audio, start, end)
         self.last_heard = {"text": text, "distance": round(dist, 3), "wake": rest is not None, "time": time.time()}
         if rest is not None:
-            # solo se registra lo que va dirigido a Cortex; lo demás que se oye en casa no se guarda
-            log.info("¡Cortex! por %s (%.2fs, dist %.3f): %r → %r", how, time.monotonic() - t, dist, text, rest)
+            # only what is addressed to Cortex is logged; anything else heard at home is not stored
+            log.info("Cortex! via %s (%.2fs, dist %.3f): %r -> %r", how, time.monotonic() - t, dist, text, rest)
             self.on_wake(rest, lang)
 
     def _split_command(self, audio: np.ndarray, start: float, end: float) -> str:
-        """Cuando «Cortex» se reconoce por el sonido, transcribe lo que va antes o después."""
+        """When "Cortex" is recognized by sound, transcribe what comes before or after."""
         total = len(audio) / RATE
         if total - end > 0.4:
             return self.stt.transcribe(audio[int(end * RATE):], settings["notice_language"])[0]
@@ -340,10 +339,10 @@ STOP_WORDS = {"para", "calla", "callate", "basta", "stop", "espera", "vale", "ya
 
 
 class BargeIn:
-    """Mientras Cortex habla: ¿le está hablando Charlie por encima?
+    """While Cortex speaks: is the user talking over it?
 
-    No hay cancelación de eco, así que el micro también oye a Cortex. Cada trozo de voz se transcribe y se
-    descarta si sus palabras son las que Cortex está diciendo. Solo trabaja mientras `enabled`.
+    There is no echo cancellation, so the mic also hears Cortex. Each voice chunk is transcribed and
+    discarded if its words are the ones Cortex is saying. Only works while `enabled`.
     """
 
     def __init__(self, mic: Mic, stt: Transcriber, on_barge: Callable[[str, bool], None]):
@@ -351,9 +350,9 @@ class BargeIn:
         self.stt = stt
         self.on_barge = on_barge
         self.enabled = False
-        self._echo: collections.deque = collections.deque()   # (momento, palabras que Cortex ha dicho)
+        self._echo: collections.deque = collections.deque()   # (time, words Cortex has said)
         self._lock = threading.Lock()
-        # el detector de «Cortex» también aquí: oye la palabra aunque la transcripción salga mal con su voz encima
+        # the "Cortex" detector here too: it hears the word even if the transcription fails with its voice on top
         self.detector = WakeWord()
         threading.Thread(target=self._run, daemon=True, name="barge-in").start()
 
@@ -370,14 +369,14 @@ class BargeIn:
             return set().union(*(w for t, w in self._echo if now - t <= within)) if self._echo else set()
 
     def _wake_heard(self, block: np.ndarray) -> bool:
-        """«Cortex» dicho por encima (si no es él mismo diciendo su nombre)."""
+        """\"Cortex\" spoken over it (unless it is Cortex itself saying its name)."""
         det = self.detector
         if not det.available or not det.process(block):
             return False
         if "cortex" in self._echo_words(within=8):
-            log.info("¿Interrupción? «Cortex» del detector (%.2f) → descartada", det.fire_score)
+            log.info("Interruption? \"Cortex\" from the detector (%.2f) -> discarded", det.fire_score)
             return False
-        log.info("¿Interrupción? «Cortex» del detector (%.2f) · SÍ", det.fire_score)
+        log.info("Interruption? \"Cortex\" from the detector (%.2f) - YES", det.fire_score)
         return True
 
     def _run(self):
@@ -401,7 +400,7 @@ class BargeIn:
             was_enabled = True
             if self._wake_heard(block):
                 self.enabled = False
-                self.on_barge("", False)   # se calla y le escucha
+                self.on_barge("", False)   # it stops talking and listens
                 buf, segment, voiced, silence = np.zeros(0, dtype=np.float32), [], 0, 0
                 preroll.clear()
                 continue
@@ -411,7 +410,7 @@ class BargeIn:
                 try:
                     prob = vad(chunk)
                 except Exception:
-                    log.exception("Error en el VAD de interrupciones")
+                    log.exception("Error in the interruption VAD")
                     continue
                 if not segment:
                     preroll.append(chunk)
@@ -428,7 +427,7 @@ class BargeIn:
                     try:
                         self._judge(audio)
                     except Exception:
-                        log.exception("Error mirando una interrupción")
+                        log.exception("Error checking an interruption")
 
     def _judge(self, audio: np.ndarray):
         if len(audio) < RATE * 0.35:
@@ -438,8 +437,8 @@ class BargeIn:
         words = [w for w in map(_norm, text.split()) if w]
         if not words or not self.enabled:
             return
-        if lang != "es":   # su propia voz mal transcrita suele salir como inglés sin sentido
-            log.info("¿Interrupción? %r → descartada (%s)", text, lang)
+        if lang != "es":   # its own voice mistranscribed usually comes out as nonsense English
+            log.info("Interruption? %r -> discarded (%s)", text, lang)
             return
         echo = self._echo_words()
         novel = [w for w in words
@@ -448,9 +447,9 @@ class BargeIn:
         wake = find_wake(text, int(settings["wake_sensitivity"])) is not None and "cortex" not in echo
         stop = len(words) <= 2 and any(w in STOP_WORDS for w in novel)
         barge = wake or stop or (len(novel) >= 3 and share >= 0.6)
-        log.info("¿Interrupción? %r → nuevas %d/%d%s", text, len(novel), len(words), " · SÍ" if barge else "")
+        log.info("Interruption? %r -> new %d/%d%s", text, len(novel), len(words), " - YES" if barge else "")
         if barge:
             self.enabled = False
-            # si casi todo lo oído es de Charlie (y no es solo «para»), se usa como orden; si no, se le vuelve a escuchar
+            # if almost everything heard is the user's (and not just "para"), it is used as the command; otherwise listen again
             clean = share >= 0.8 and not stop and len(words) >= 2
             self.on_barge(text if clean else "", stop and not wake)

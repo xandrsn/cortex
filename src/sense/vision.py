@@ -1,11 +1,11 @@
-"""Cámara: atención (¿mira a la pantalla?) y gestos de la mano con MediaPipe.
+"""Camera: attention (is the user looking at the screen?) and hand gestures with MediaPipe.
 
-Un hilo propio lee la webcam solo mientras los gestos están activados:
-- Cara (FaceLandmarker, ~5 fps siempre): giro/cabeceo de la cabeza → «mirando» → «atento» con histéresis.
-- Mano (GestureRecognizer, ~15 fps solo si está atento o no hace falta mirar): gestos estáticos
-  (los de MediaPipe y los propios grabados por el usuario, k-NN) y deslizamientos con la trayectoria
-  del centro de la palma.
-No ejecuta acciones: avisa con on_gesture(gesto, acción) y on_presence(atento) desde su hilo.
+A dedicated thread reads the webcam only while gestures are enabled:
+- Face (FaceLandmarker, ~5 fps always): head yaw/pitch → "looking" → "engaged" with hysteresis.
+- Hand (GestureRecognizer, ~15 fps only when engaged or looking is not required): static gestures
+  (MediaPipe's own and the user's recorded ones, k-NN) and swipes from the trajectory
+  of the palm centre.
+It does not run actions: it reports via on_gesture(gesture, action) and on_presence(engaged) from its thread.
 """
 
 import json
@@ -24,8 +24,8 @@ import numpy as np
 
 from .config import DEFAULTS, MODELS_DIR, ROOT, settings
 
-# mediapipe se importa tarde (arranque rápido), pero desde un solo hilo a la vez: si el hilo de la cara y el de
-# los modelos lo importaban a la vez, Python daba _DeadlockError y la cámara se quedaba ciega hasta reiniciar
+# mediapipe is imported lazily (fast startup), but from one thread at a time: when the face thread and the
+# model-loading thread imported it simultaneously, Python raised _DeadlockError and the camera went blind until restart
 _MP_LOCK = threading.Lock()
 
 
@@ -49,9 +49,9 @@ CUSTOM_FILE = ROOT / "gestures" / "custom.json"
 
 W, H = 640, 480
 FACE_PERIOD = 0.2            # ~5 fps
-MAX_CAM_FPS = 32            # tope de la cámara (Charlie lo pidió así)
-HAND_PERIOD = 1 / 30         # con mano a la vista: lo que dé la CPU (~15-20 fps)
-SEARCH_PERIOD = 1 / 12       # buscando mano (la detección de palma es lo más caro)
+MAX_CAM_FPS = 32            # camera fps cap (requested by the owner)
+HAND_PERIOD = 1 / 30         # hand in view: whatever the CPU allows (~15-20 fps)
+SEARCH_PERIOD = 1 / 12       # searching for a hand (palm detection is the most expensive part)
 CANNED = {"Thumb_Up": "thumb_up", "Thumb_Down": "thumb_down", "Open_Palm": "open_palm",
           "Closed_Fist": "closed_fist", "Victory": "victory", "Pointing_Up": "pointing_up",
           "ILoveYou": "i_love_you"}
@@ -61,46 +61,46 @@ MOTIONS = ["swipe_left", "swipe_right", "swipe_up", "swipe_down", "flick_right",
 TWO_HANDS = ["both_palms", "both_thumbs_up", "both_thumbs_down", "both_fists", "hands_apart", "hands_together"]
 GESTURES = list(CANNED.values()) + EXTRA_POSES + MOTIONS + TWO_HANDS
 PALM = [0, 5, 9, 13, 17]
-REPEATABLE = {"volume_up", "volume_down", "media:volume_up", "media:volume_down"}   # se repiten mientras se mantiene el gesto
-STATIC_AFTER_SWIPE = 1.2     # s sin gestos estáticos tras deslizar (la mano sigue abierta)
-EXTRA_HOLD = {"open_palm": 0.25}   # la palma abierta suele preceder a un deslizamiento
+REPEATABLE = {"volume_up", "volume_down", "media:volume_up", "media:volume_down"}   # repeat while the gesture is held
+STATIC_AFTER_SWIPE = 1.2     # s without static gestures after a swipe (the hand is still open)
+EXTRA_HOLD = {"open_palm": 0.25}   # an open palm usually precedes a swipe
 HAND_LINKS = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (5, 9), (9, 10), (10, 11),
               (11, 12), (9, 13), (13, 14), (14, 15), (15, 16), (13, 17), (0, 17), (17, 18), (18, 19), (19, 20)]
 
 
 def cfg(key):
-    """Ajuste en vivo; si el proceso arrancó con un config.py viejo, el valor por defecto."""
+    """Live setting; if the process started with an old config.py, the default value."""
     try:
         return settings[key]
     except KeyError:
         return DEFAULTS[key]
 
 
-# ── Partes puras (probadas en tools/vision_unit.py) ─────────────────────────────────────────────
+# ── Pure parts (tested in tools/vision_unit.py) ─────────────────────────────────────────────
 
 def normalize(points, left: bool = False) -> np.ndarray | None:
-    """21 puntos (x, y en unidades proporcionales, p. ej. píxeles) → vector de 42 invariante a posición,
-    escala, giro en el plano y mano (las izquierdas se reflejan a derechas)."""
+    """21 points (x, y in proportional units, e.g. pixels) → 42-vector invariant to position,
+    scale, in-plane rotation and handedness (left hands are mirrored to right hands)."""
     p = np.asarray(points, dtype=float)[:21, :2].copy()
     if left:
         p[:, 0] = -p[:, 0]
-    z = (p[:, 0] - p[0, 0]) + 1j * (p[:, 1] - p[0, 1])     # relativo a la muñeca
-    ref = z[9]                                               # muñeca → nudillo del medio
+    z = (p[:, 0] - p[0, 0]) + 1j * (p[:, 1] - p[0, 1])     # relative to the wrist
+    ref = z[9]                                               # wrist → middle knuckle
     s = abs(ref)
     if s < 1e-6:
         return None
-    z = z * (-1j / (ref / s)) / s                            # que apunte hacia arriba (y negativa) y mida 1
+    z = z * (-1j / (ref / s)) / s                            # point up (negative y) and have length 1
     return np.stack([z.real, z.imag], axis=1).ravel()
 
 
 def hand_distance(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Distancia media por punto (en palmos) entre a (42,) y b (n, 42)."""
+    """Mean per-point distance (in palm widths) between a (42,) and b (n, 42)."""
     d = np.asarray(b).reshape(-1, 21, 2) - np.asarray(a).reshape(1, 21, 2)
     return np.linalg.norm(d, axis=2).mean(axis=1)
 
 
 class CustomClassifier:
-    """k-NN sobre poses normalizadas con umbral de distancia para no casar cualquier mano."""
+    """k-NN over normalized poses with a distance threshold so that not every hand matches."""
 
     def __init__(self, k: int = 5):
         self.k = k
@@ -124,13 +124,13 @@ class CustomClassifier:
         votes = Counter(self.names[i] for i in idx)
         best = min(votes, key=lambda n: (-votes[n], np.mean([d[i] for i in idx if self.names[i] == n])))
         dist = float(np.mean([d[i] for i in idx if self.names[i] == best]))
-        if votes[best] * 2 < len(idx) and len(idx) > 1:    # sin mayoría clara
+        if votes[best] * 2 < len(idx) and len(idx) > 1:    # no clear majority
             return None, dist
         return (best, dist) if dist <= threshold else (None, dist)
 
 
 class SwipeDetector:
-    """Deslizamientos a partir de la trayectoria del centro de la palma (x ya reflejada, 0..1)."""
+    """Swipes from the palm-centre trajectory (x already mirrored, 0..1)."""
 
     def __init__(self, min_dist=0.22, min_speed=0.6, min_dt=0.1, max_dt=0.6, axis_ratio=0.5,
                  straightness=0.75, gap=0.25, refractory=1.2, move_speed=0.5):
@@ -145,7 +145,7 @@ class SwipeDetector:
         self.hist.clear()
 
     def update(self, t: float, x: float | None = None, y: float | None = None) -> str | None:
-        if self.hist and t - self.hist[-1][0] > self.gap:      # se perdió la mano: trayectoria nueva
+        if self.hist and t - self.hist[-1][0] > self.gap:      # hand lost: new trajectory
             self.hist.clear()
         if x is None:
             return None
@@ -170,9 +170,9 @@ class SwipeDetector:
                 continue
             k = 1 if horiz else 2
             steps = [abs(pts[j + 1][k] - pts[j][k]) for j in range(i, len(pts) - 1)]
-            if len(steps) < 2 or max(steps) > 0.6 * abs(major):   # saltos (la detección cambió de mano)
+            if len(steps) < 2 or max(steps) > 0.6 * abs(major):   # jumps (detection switched hands)
                 continue
-            if abs(major) < self.straightness * sum(steps):         # ida y vuelta, temblores
+            if abs(major) < self.straightness * sum(steps):         # back and forth, tremor
                 continue
             self.last_swipe = t
             self.hist.clear()
@@ -192,7 +192,7 @@ class SwipeDetector:
 
 
 class Hold:
-    """Un gesto estático cuenta cuando se mantiene un tiempo seguido."""
+    """A static gesture counts once it has been held for a while."""
 
     def __init__(self):
         self.label: str | None = None
@@ -207,8 +207,8 @@ class Hold:
 
 
 class Gate:
-    """Enfriamiento: nada durante `cooldown` tras un gesto; el mismo gesto no se repite hasta que la mano
-    cambia de pose (≥ change_s) o, si es repetible (el volumen), pasan `repeat_s` manteniéndolo."""
+    """Cooldown: nothing for `cooldown` after a gesture; the same gesture does not repeat until the hand
+    changes pose (≥ change_s) or, if it is repeatable (volume), `repeat_s` pass while holding it."""
 
     def __init__(self, cooldown=1.0, repeat_s=1.5, change_s=0.2):
         self.cooldown, self.repeat_s, self.change_s = cooldown, repeat_s, change_s
@@ -233,7 +233,7 @@ class Gate:
             return False
         if gid != self.last_gid or self.changed:
             return True
-        # mantener la palma no debe pausar y reanudar cada 1,5 s; el pulgar sí sigue subiendo el volumen
+        # holding the palm must not pause and resume every 1.5 s; the thumb does keep raising the volume
         return repeat and t - self.last_t >= self.repeat_s
 
     def fire(self, gid: str, t: float) -> None:
@@ -242,7 +242,7 @@ class Gate:
 
 
 class Attention:
-    """«Atento» tras mirar engage_s seguidos; deja de estarlo tras release_s sin mirar."""
+    """"Engaged" after looking for engage_s in a row; stops being engaged after release_s without looking."""
 
     def __init__(self, engage_s=0.4, release_s=2.0):
         self.engage_s, self.release_s = engage_s, release_s
@@ -266,12 +266,12 @@ class Attention:
         return None
 
 
-# ── Posturas por geometría (además de las de MediaPipe) ──
+# ── Geometric poses (in addition to MediaPipe's) ──
 TIPS, PIPS = (8, 12, 16, 20), (6, 10, 14, 18)
 
 
 def fingers(pts) -> dict:
-    """¿Qué dedos están estirados? pts: 21 puntos (x, y) en píxeles. También la pinza pulgar-índice."""
+    """Which fingers are extended? pts: 21 points (x, y) in pixels. Also the thumb-index pinch."""
     p = np.asarray(pts, dtype=float)[:21, :2]
     palm = np.linalg.norm(p[9] - p[0]) + 1e-6
     ext = {}
@@ -284,7 +284,7 @@ def fingers(pts) -> dict:
 
 
 def pose(f: dict) -> str | None:
-    """Posturas extra a partir de fingers(): ok, shaka, rock, three, pointing (interna), open (interna)."""
+    """Extra poses from fingers(): ok, shaka, rock, three, pointing (internal), open (internal)."""
     i, m, r, k, t = f["index"], f["middle"], f["ring"], f["pinky"], f["thumb"]
     if f["pinch"] and m and r and k:
         return "ok"
@@ -302,17 +302,17 @@ def pose(f: dict) -> str | None:
 
 
 def shush_pose(pts, mouth, face_w: float) -> bool:
-    """Índice vertical cruzando los labios (el gesto de «silencio»). pts en píxeles; mouth (x, y) en píxeles."""
+    """Vertical index finger across the lips (the "shush" gesture). pts in pixels; mouth (x, y) in pixels."""
     p = np.asarray(pts, dtype=float)[:21, :2]
     tip, pip = p[8], p[6]
-    if pip[1] - tip[1] < abs(tip[0] - pip[0]):           # el dedo apunta hacia arriba
+    if pip[1] - tip[1] < abs(tip[0] - pip[0]):           # the finger points up
         return False
     seg = [p[6], p[7], p[8], (p[7] + p[8]) / 2, (p[6] + p[7]) / 2]
     return min(np.linalg.norm(q - np.asarray(mouth)) for q in seg) < 0.3 * face_w
 
 
 def reversals(values, amp: float) -> int:
-    """Cuántas veces cambia de sentido una serie, contando solo idas y vueltas de al menos `amp`."""
+    """How many times a series reverses direction, counting only back-and-forth moves of at least `amp`."""
     count, direction, ext = 0, 0, None
     for v in values:
         if ext is None:
@@ -330,16 +330,16 @@ def reversals(values, amp: float) -> int:
 
 
 class MotionDetector:
-    """Gestos de movimiento de una mano (coordenadas 0..1 vistas por el usuario, x reflejada):
-    - flick_right / flick_left: toque rápido del índice hacia un lado («siguiente / anterior»)
-    - wag: índice de lado a lado («no»)
-    - circle_cw / circle_ccw: círculo con el índice (horario / antihorario)
-    - wave: mano abierta saludando
-    - push: mano abierta empujando hacia la cámara
+    """Motion gestures of one hand (0..1 coordinates as the user sees them, x mirrored):
+    - flick_right / flick_left: quick index-finger flick to one side ("next / previous")
+    - wag: index finger side to side ("no")
+    - circle_cw / circle_ccw: circle with the index finger (clockwise / counter-clockwise)
+    - wave: open hand waving
+    - push: open hand pushing toward the camera
     """
 
     def __init__(self, refractory: float = 1.0):
-        self.hist: deque = deque()   # (t, tip_x, tip_y, palm_x, palm_y, escala, postura)
+        self.hist: deque = deque()   # (t, tip_x, tip_y, palm_x, palm_y, scale, pose)
         self.refractory = refractory
         self.last = -math.inf
 
@@ -366,7 +366,7 @@ class MotionDetector:
     def _detect(self, t) -> str | None:
         pts = list(self.hist)
         recent = [p for p in pts if t - p[0] <= 0.3]
-        # toque del índice: el dedo se mueve rápido hacia un lado y la palma bastante menos
+        # index flick: the finger moves fast to one side and the palm much less
         if len(recent) >= 3 and self._share(recent, "pointing") >= 0.6:
             dx = recent[-1][1] - recent[0][1]
             dy = recent[-1][2] - recent[0][2]
@@ -407,12 +407,12 @@ class MotionDetector:
         total = ang[-1] - ang[0]
         if abs(total) < 1.6 * math.pi:
             return None
-        # y hacia abajo: ángulo creciente = sentido horario en pantalla
+        # y points down: increasing angle = clockwise on screen
         return "circle_cw" if total > 0 else "circle_ccw"
 
 
 class PairDetector:
-    """Gestos con las dos manos: separar / juntar las manos abiertas."""
+    """Two-hand gestures: moving open hands apart / together."""
 
     def __init__(self, refractory: float = 1.2):
         self.hist: deque = deque()
@@ -442,7 +442,7 @@ class PairDetector:
 
 
 def pair_pose(a: str | None, b: str | None) -> str | None:
-    """Postura de las dos manos a la vez (a y b: etiqueta de cada mano)."""
+    """Pose of both hands at once (a and b: each hand's label)."""
     pair = {a, b}
     if pair == {"open_palm"}:
         return "both_palms"
@@ -456,9 +456,9 @@ def pair_pose(a: str | None, b: str | None) -> str | None:
 
 
 def head_angles(matrix) -> tuple[float, float]:
-    """Matriz de transformación facial 4×4 → (giro, cabeceo) en grados.
-    Giro + = hacia la derecha del usuario; cabeceo + = mirando hacia abajo."""
-    n = np.asarray(matrix, dtype=float)[:3, 2]          # hacia dónde apunta la nariz (cámara: y arriba)
+    """Facial transformation matrix 4×4 → (yaw, pitch) in degrees.
+    Yaw + = toward the user's right; pitch + = looking down."""
+    n = np.asarray(matrix, dtype=float)[:3, 2]          # where the nose points (camera: y up)
     yaw = -math.degrees(math.atan2(n[0], n[2]))
     pitch = -math.degrees(math.atan2(n[1], math.hypot(n[0], n[2])))
     return yaw, pitch
@@ -470,19 +470,19 @@ def ensure_models() -> None:
         dest = MP_DIR / name
         if dest.exists() and dest.stat().st_size > 100_000:
             continue
-        log.info("Descargando %s…", name)
+        log.info("Downloading %s…", name)
         tmp = dest.with_suffix(".part")
         urllib.request.urlretrieve(url, tmp)
         tmp.replace(dest)
 
 
-# ── Motor ────────────────────────────────────────────────────────────────────────────────────
+# ── Engine ────────────────────────────────────────────────────────────────────────────────────
 
 class Grabber:
-    """Lee la cámara sin parar en su propio hilo (a lo que dé, con tope de MAX_CAM_FPS) y guarda la última imagen.
+    """Reads the camera continuously in its own thread (as fast as it goes, capped at MAX_CAM_FPS) and keeps the latest frame.
 
-    Así el análisis siempre coge una imagen fresca (sin el retraso del búfer del driver) y la vista
-    previa va fluida aunque el análisis vaya más lento.
+    This way the analysis always gets a fresh frame (without the driver buffer lag) and the preview
+    stays smooth even if the analysis is slower.
     """
 
     def __init__(self, cap, on_frame: Callable | None = None):
@@ -510,7 +510,7 @@ class Grabber:
                 continue
             self.fails = 0
             now = time.monotonic()
-            # tope de fps: las imágenes que llegan antes de tiempo se leen (para no atascar el búfer) y se tiran
+            # fps cap: frames arriving too early are read (so the buffer does not clog) and dropped
             if self._last_t is not None and now - self._last_t < 1 / MAX_CAM_FPS - 0.002:
                 continue
             if self._last_t is not None:
@@ -523,10 +523,10 @@ class Grabber:
                 try:
                     self.on_frame(frame)
                 except Exception:
-                    log.exception("Error en la vista previa")
+                    log.exception("Preview error")
 
     def wait(self, after: int, timeout: float = 1.0):
-        """La primera imagen posterior a `after`: (imagen, número) o (None, after) si no llega a tiempo."""
+        """The first frame after `after`: (frame, number), or (None, after) if none arrives in time."""
         with self._cond:
             self._cond.wait_for(lambda: self._seq > after or self._stop.is_set(), timeout)
             if self._seq > after:
@@ -563,7 +563,7 @@ class Vision:
         self._prev_small = None
         self._stuck = 0
         self._slow_since = None
-        self._slow_reopens = 0   # si sigue lenta tras reabrir 3 veces (habitación a oscuras), se deja estar
+        self._slow_reopens = 0   # if still slow after reopening 3 times (dark room), give up
         self._face = self._gest = None
         self._t0 = time.monotonic()
         self._ts = {"face": -1, "gest": -1}
@@ -580,20 +580,20 @@ class Vision:
         self.fps = 0.0
         self._face_lms = None
         self._hand_pts = None
-        self.measure = {"brightness": None, "hand_size": None, "side": None, "pinch": None}   # para la calibración
+        self.measure = {"brightness": None, "hand_size": None, "side": None, "pinch": None}   # for calibration
         self._jpeg: bytes | None = None
         self._last_face_t = -math.inf
         self._last_hand_t = -math.inf
         self._last_tick = None
-        # lógica
+        # logic
         self.attention = Attention()
-        self._trackers: dict[str, dict] = {}   # por mano: deslizamientos y movimientos
+        self._trackers: dict[str, dict] = {}   # per hand: swipes and motions
         self.pair = PairDetector()
         self.hands = 0
         self._hands_pts: list = []
         self.hold = Hold()
         self.gate = Gate()
-        self.yield_cpu = False   # lo pone Cortex mientras transcribe
+        self.yield_cpu = False   # set by Cortex while it transcribes
         self.classifier = CustomClassifier()
         self._custom: dict[str, dict] = {}
         self._rec: dict | None = None
@@ -656,13 +656,13 @@ class Vision:
         }
 
     def record_custom(self, name: str, seconds: float = 3.0) -> bool:
-        """Empieza a grabar la pose actual (no bloquea; el progreso sale en state())."""
+        """Start recording the current pose (non-blocking; progress is reported in state())."""
         name = re.sub(r"\s+", " ", str(name)).strip()[:40]
         if not name or ":" in name or self._rec or not self.enabled:
             return False
         self._rec_result = None
         self._rec = {"name": name, "seconds": max(0.5, float(seconds)), "start": time.monotonic(), "frames": []}
-        log.info("Grabando gesto propio «%s» (%.1f s)", name, seconds)
+        log.info("Recording custom gesture \"%s\" (%.1f s)", name, seconds)
         return True
 
     def delete_custom(self, name: str) -> bool:
@@ -679,14 +679,14 @@ class Vision:
             return [{"name": n, "id": f"custom:{n}", "samples": len(g["samples"]), "created": g.get("created")}
                     for n, g in self._custom.items()]
 
-    # ── gestos propios ──
+    # ── custom gestures ──
     def _load_custom(self):
         try:
             if CUSTOM_FILE.exists():
                 data = json.loads(CUSTOM_FILE.read_text(encoding="utf-8"))
                 self._custom = data.get("gestures", {})
         except Exception as e:
-            log.warning("No se pudo leer %s: %s", CUSTOM_FILE, e)
+            log.warning("Could not read %s: %s", CUSTOM_FILE, e)
             self._custom = {}
         self._refit()
 
@@ -710,8 +710,8 @@ class Vision:
         frames = rec["frames"]
         if len(frames) < 5:
             self._rec_result = {"name": rec["name"], "ok": False, "frames": len(frames),
-                                "error": "no se vio la mano"}
-            log.info("Grabación de «%s» fallida: %d fotogramas con mano", rec["name"], len(frames))
+                                "error": "hand not seen"}
+            log.info("Recording of \"%s\" failed: %d frames with a hand", rec["name"], len(frames))
             return
         with self._lock:
             self._custom[rec["name"]] = {"created": datetime.now().isoformat(timespec="seconds"),
@@ -719,9 +719,9 @@ class Vision:
             self._refit()
         self._save_custom()
         self._rec_result = {"name": rec["name"], "ok": True, "frames": len(frames), "error": None}
-        log.info("Gesto propio «%s» guardado (%d muestras)", rec["name"], len(frames))
+        log.info("Custom gesture \"%s\" saved (%d samples)", rec["name"], len(frames))
 
-    # ── cámara y modelos ──
+    # ── camera and models ──
     @staticmethod
     def _open_camera(index: int):
         cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
@@ -734,7 +734,7 @@ class Vision:
 
     def _release(self):
         if self._grabber is not None:
-            self._grabber.close()   # cierra también la cámara, después de parar su hilo
+            self._grabber.close()   # also closes the camera, after stopping its thread
             self._grabber = None
         elif self._cap is not None:
             try:
@@ -743,7 +743,7 @@ class Vision:
                 pass
         if self._cap is not None:
             self._cap = None
-            log.info("Cámara liberada")
+            log.info("Camera released")
         self._seq = 0
         self.camera_ok = False
 
@@ -761,7 +761,7 @@ class Vision:
             base_options=BaseOptions(model_asset_path=str(MP_DIR / "gesture_recognizer.task")),
             running_mode=mpv.RunningMode.VIDEO, num_hands=2,
             min_hand_detection_confidence=0.6, min_hand_presence_confidence=0.6))
-        log.info("Modelos de visión cargados")
+        log.info("Vision models loaded")
 
     def _stamp(self, task: str, now: float) -> int:
         ms = int((now - self._t0) * 1000)
@@ -770,9 +770,9 @@ class Vision:
         self._ts[task] = ms
         return ms
 
-    # ── bucle ──
+    # ── loop ──
     def _run(self):
-        log.info("Visión arrancada")
+        log.info("Vision started")
         fails = 0
         while not self._stop.is_set():
             try:
@@ -786,8 +786,8 @@ class Vision:
                     try:
                         self._load_models()
                     except Exception as e:
-                        self.error = f"modelos: {e}"
-                        log.warning("No se pudieron cargar los modelos de visión: %s", e)
+                        self.error = f"models: {e}"
+                        log.warning("Could not load the vision models: %s", e)
                         self._stop.wait(30)
                         continue
                 index = int(cfg("camera_index"))
@@ -798,10 +798,10 @@ class Vision:
                     self._cap_index = index
                     if self._cap is None:
                         self.camera_ok = False
-                        self.error = f"no se pudo abrir la cámara {index}"
+                        self.error = f"could not open camera {index}"
                         self._stop.wait(3)
                         continue
-                    log.info("Cámara %d abierta", index)
+                    log.info("Camera %d opened", index)
                     self._grabber = Grabber(self._cap, self._preview_frame)
                     self._seq = 0
                 self._wait_tick()
@@ -810,22 +810,22 @@ class Vision:
                     if self._grabber.fails >= 20 or not self.camera_ok:
                         fails += 1
                     if fails >= 3:
-                        self.error = "la cámara no da imagen"
-                        log.warning("La cámara no da imagen; se reintenta")
+                        self.error = "the camera gives no image"
+                        log.warning("The camera gives no image; retrying")
                         fails = 0
                         self._release()
                         self._stop.wait(3)
                     continue
                 fails = 0
-                frame = frame.copy()   # el driver puede reutilizar su búfer
-                # imagen negra o congelada durante un rato: la conexión se ha colgado (pasa tras horas
-                # encendida o al volver de suspensión); se vuelve a abrir la cámara
+                frame = frame.copy()   # the driver may reuse its buffer
+                # black or frozen image for a while: the connection hung (happens after hours
+                # on or when resuming from suspend); reopen the camera
                 small = cv2.resize(frame, (32, 24)).astype(np.int16)
                 stuck = small.mean() < 12 or (self._prev_small is not None
                                               and not np.any(small != self._prev_small))
                 self._prev_small = small
                 self._stuck = self._stuck + 1 if stuck else 0
-                # o a ~1 fps y con ruido: el driver se ha liado (visto el 27-10); también se reabre
+                # or ~1 fps with noise: the driver got confused (seen on 27-10); also reopen
                 slow = self._grabber.fps and self._grabber.fps < 3
                 self._slow_since = (self._slow_since or time.monotonic()) if slow else None
                 if not slow and self._grabber.fps:
@@ -834,9 +834,9 @@ class Vision:
                 if too_slow or self._stuck >= 30:
                     if too_slow:
                         self._slow_reopens += 1
-                        log.warning("La cámara va a %.1f fps; la reabro", self._grabber.fps)
+                        log.warning("The camera runs at %.1f fps; reopening it", self._grabber.fps)
                     else:
-                        log.warning("La cámara da imagen negra o congelada; la reabro")
+                        log.warning("The camera image is black or frozen; reopening it")
                     self._stuck, self._prev_small, self._slow_since = 0, None, None
                     self._release()
                     self._stop.wait(1)
@@ -846,9 +846,9 @@ class Vision:
                 self._process(frame)
             except Exception as e:
                 self.error = str(e)
-                log.exception("Error en el bucle de visión")
+                log.exception("Error in the vision loop")
                 self._stop.wait(1)
-        log.info("Visión detenida")
+        log.info("Vision stopped")
 
     def _disable(self):
         self._release()
@@ -865,7 +865,7 @@ class Vision:
             self.attention = Attention()
 
     def _hands_active(self) -> bool:
-        if self.yield_cpu and not self._rec:   # Cortex está transcribiendo: la CPU, para eso (~25 % más rápido)
+        if self.yield_cpu and not self._rec:   # Cortex is transcribing: leave the CPU to it (~25 % faster)
             return False
         return bool(self._rec) or not cfg("gestures_require_look") or self.attention.engaged
 
@@ -905,13 +905,13 @@ class Vision:
             self._jpeg = None
 
     def _face_loop(self):
-        """Hilo aparte para la cara (~5 fps): así no frena el análisis de la mano. Si algo falla se apunta y sigue
-        (antes un error suelto mataba el hilo en silencio y la cámara dejaba de ver la cara hasta reiniciar)."""
+        """Separate thread for the face (~5 fps) so it does not slow down hand analysis. If something fails it is logged and
+        the loop continues (a stray error used to kill the thread silently and the camera stopped seeing the face until restart)."""
         while not self._stop.is_set():
             try:
                 self._face_loop_inner()
             except Exception:
-                log.exception("Error en el hilo de la cara; lo reanudo")
+                log.exception("Error in the face thread; resuming")
                 self._stop.wait(1)
 
     def _face_loop_inner(self):
@@ -929,14 +929,14 @@ class Vision:
             frame, seq = g.wait(seq, timeout=1.0)
             if frame is None:
                 if g._stop.is_set():
-                    self._stop.wait(0.2)   # se está cerrando la cámara: no dar vueltas en vacío
+                    self._stop.wait(0.2)   # the camera is closing: do not spin idly
                 continue
             now = time.monotonic()
             try:
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                 res = self._face.detect_for_video(image, self._stamp("face", now))
             except Exception:
-                log.exception("Error analizando la cara")
+                log.exception("Error analysing the face")
                 self._stop.wait(1)
                 continue
             if res.face_landmarks and res.facial_transformation_matrixes:
@@ -948,12 +948,12 @@ class Vision:
                 self._face_lms, self.yaw, self.pitch, self.looking = None, None, None, False
             change = self.attention.update(self.looking, now)
             if change is not None:
-                log.info("Atención: %s", "atento" if change else "ya no mira")
+                log.info("Attention: %s", "engaged" if change else "no longer looking")
                 self._presence(change)
             self._stop.wait(max(0.0, now + FACE_PERIOD - time.monotonic()))
 
     def _preview_frame(self, frame):
-        """Desde el hilo de la cámara: vista previa fluida con lo último que se ha detectado (máx. 25 fps)."""
+        """From the camera thread: smooth preview with the latest detections (max 25 fps)."""
         if self.preview_clients <= 0:
             return
         now = time.monotonic()
@@ -978,8 +978,8 @@ class Vision:
         return self._trackers[key]
 
     def _classify(self, res, i: int, pts, left: bool):
-        """Etiqueta de una mano: gesto propio > gesto de MediaPipe > postura por geometría.
-        Devuelve (etiqueta, confianza, postura geométrica, vector normalizado)."""
+        """Label of one hand: custom gesture > MediaPipe gesture > geometric pose.
+        Returns (label, confidence, geometric pose, normalized vector)."""
         vec = normalize(pts, left)
         kind = pose(fingers(pts))
         thr = float(cfg("custom_gesture_threshold"))
@@ -1008,7 +1008,7 @@ class Vision:
             pts = np.array([(p.x * w, p.y * h) for p in lms])
             side = res.handedness[i][0].category_name if len(res.handedness) > i and res.handedness[i] else "?"
             found.append((i, pts, side))
-        # de izquierda a derecha según el usuario; si las dos salen del mismo lado, se distinguen por posición
+        # left to right as the user sees it; if both report the same side, tell them apart by position
         found.sort(key=lambda f: -f[1][0, 0])
         sides = [f[2] for f in found]
         keys = [side if sides.count(side) == 1 else f"{side}{n}" for n, side in enumerate(sides)]
@@ -1016,7 +1016,7 @@ class Vision:
         labels, motions, palms, kinds = [], [], [], []
         self._hands_pts = [f[1] for f in found]
         self._hand_pts = found[0][1] if found else None
-        if found:   # muñeca → nudillo del medio, en fracción de la altura: crece cuanto más cerca está la mano
+        if found:   # wrist → middle knuckle as a fraction of the frame height: grows as the hand gets closer
             self.measure["hand_size"] = round(float(np.hypot(*(found[0][1][9] - found[0][1][0])) / h), 3)
             self.measure["side"] = found[0][2]
             self.measure["pinch"] = [round(float(v), 4) for v in (found[0][1][4] - found[0][1][8]) / (w, h)]
@@ -1025,12 +1025,12 @@ class Vision:
             tr["seen"] = now
             label, score, kind, vec = self._classify(res, i, pts, side == "Left")
             if kind == "pointing" and self._near_mouth(pts, w, h):
-                label, score = "shush", 0.9   # manda sobre «índice arriba» de MediaPipe
+                label, score = "shush", 0.9   # takes precedence over MediaPipe's "index up"
             palm = pts[PALM].mean(axis=0)
-            palm_u = (1.0 - palm[0] / w, palm[1] / h)            # x reflejada (vista del usuario)
+            palm_u = (1.0 - palm[0] / w, palm[1] / h)            # x mirrored (user's view)
             tip_u = (1.0 - pts[8][0] / w, pts[8][1] / h)
             tr["swipes"].min_dist = float(cfg("swipe_min_distance"))
-            # con el índice estirado mandan los toques de dedo, no los deslizamientos de la palma
+            # with the index finger extended, finger flicks take precedence over palm swipes
             if kind == "pointing":
                 tr["swipes"].reset()
                 swipe = None
@@ -1061,7 +1061,7 @@ class Vision:
         else:
             self.label, self.score = None, 0.0
 
-        if self._rec is not None:            # grabando: no se dispara nada
+        if self._rec is not None:            # recording: nothing fires
             self.hold.update(None, now, 0)
             return
         self.gate.cooldown = float(cfg("gesture_cooldown"))
@@ -1075,7 +1075,7 @@ class Vision:
         last_move = max([tr["swipes"].last_swipe for tr in trackers] + [tr["motion"].last for tr in trackers]
                         + [-math.inf])
         still = not moving and now - last_move >= STATIC_AFTER_SWIPE
-        # con dos manos solo cuentan las posturas de pareja (si no, la palma de cada mano dispararía sola)
+        # with two hands only pair poses count (otherwise each hand's palm would fire on its own)
         static = pair_label if len(found) == 2 else (labels[0][0] if labels else None)
         held = self.hold.update(static if still else None, now, float(cfg("gesture_hold_seconds")))
         if held and self.gate.allow(held, now, repeat=self._action(held) in REPEATABLE):
@@ -1089,26 +1089,26 @@ class Vision:
         self.gate.fire(gid, now)
         action = self._action(gid)
         self.last_event = {"gesture": gid, "action": action, "active": action != "none", "time": time.time()}
-        log.info("Gesto %s → %s", gid, action)
+        log.info("Gesture %s → %s", gid, action)
         if self.on_gesture:
             try:
                 self.on_gesture(gid, action)
             except Exception:
-                log.exception("Error en on_gesture")
+                log.exception("Error in on_gesture")
 
     def _presence(self, engaged: bool):
         if self.on_presence:
             try:
                 self.on_presence(engaged)
             except Exception:
-                log.exception("Error en on_presence")
+                log.exception("Error in on_presence")
 
-    # ── vista previa ──
+    # ── preview ──
     def _annotate(self, frame) -> bytes | None:
         img = cv2.flip(frame, 1)
         h, w = img.shape[:2]
 
-        def pt(x, y):                       # coordenadas normalizadas → píxel en la vista reflejada
+        def pt(x, y):                       # normalized coordinates → pixel in the mirrored view
             return int((1 - x) * w), int(y * h)
 
         color = (60, 200, 60) if self.looking else (60, 60, 230)
@@ -1140,19 +1140,19 @@ class Vision:
         yaw = "--" if self.yaw is None else f"{self.yaw:+.0f}"
         pitch = "--" if self.pitch is None else f"{self.pitch:+.0f}"
         lines = [
-            (f"yaw {yaw}  pitch {pitch}  {'MIRANDO' if self.looking else 'no mira'}", color),
-            (f"atento: {'SI' if self.attention.engaged else 'no'}   camara {self.cam_fps:.0f} fps  analisis {self.fps:.0f} fps",
+            (f"yaw {yaw}  pitch {pitch}  {'LOOKING' if self.looking else 'not looking'}", color),
+            (f"engaged: {'YES' if self.attention.engaged else 'no'}   camera {self.cam_fps:.0f} fps  analysis {self.fps:.0f} fps",
              (60, 200, 60) if self.attention.engaged else (200, 200, 200)),
-            (f"manos {self.hands}  gesto: {self.label or '-'}  {self.score:.2f}" if self.hand else "gesto: (sin mano)",
+            (f"hands {self.hands}  gesture: {self.label or '-'}  {self.score:.2f}" if self.hand else "gesture: (no hand)",
              (255, 255, 255)),
         ]
         ev = self.last_event
         if ev and time.time() - ev["time"] < 5:
-            lines.append((f"ultimo: {ev['gesture']} -> {ev['action']}", (0, 220, 255)))
+            lines.append((f"last: {ev['gesture']} -> {ev['action']}", (0, 220, 255)))
         if self._rec:
-            lines.append((f"GRABANDO {self._rec['name']} {self._rec_progress() * 100:.0f}%", (60, 60, 255)))
+            lines.append((f"RECORDING {self._rec['name']} {self._rec_progress() * 100:.0f}%", (60, 60, 255)))
         band = img[: 12 + 22 * len(lines)]
-        band[:] = (band * 0.4).astype(np.uint8)              # fondo oscuro translúcido para el texto
+        band[:] = (band * 0.4).astype(np.uint8)              # translucent dark background for the text
         for i, (text, c) in enumerate(lines):
             cv2.putText(img, text, (8, 24 + 22 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.55, c, 1, cv2.LINE_AA)
         ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])

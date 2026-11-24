@@ -1,6 +1,6 @@
-; Instalador de Cortex Sense (Inno Setup 6). Lo compila build.ps1: ISCC /DAppVersion=x.y.z installer\cortex-sense.iss
-; Por usuario y sin administrador: Sense guarda sense.yaml y los gestos propios en su propia carpeta.
-; La primera vez que se abre, el panel (http://127.0.0.1:8766) lleva al asistente: cámara y calibración.
+; Cortex Sense installer (Inno Setup 6). Built by build.ps1: ISCC /DAppVersion=x.y.z installer\cortex-sense.iss
+; Per-user, no administrator: Sense keeps sense.yaml and the custom gestures in its own folder.
+; The first time it opens, the panel (http://127.0.0.1:8766) leads to the wizard: camera and calibration.
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -77,7 +77,7 @@ begin
   Privacy := CreateOutputMsgPage(wpWelcome, 'Webcam', '', CustomMessage('Privacy'));
 end;
 
-{ Solo el CortexSense.exe de esta carpeta }
+{ Only the CortexSense.exe from this folder }
 function StopSense: Boolean;
 var
   Code: Integer;

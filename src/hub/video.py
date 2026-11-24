@@ -1,7 +1,7 @@
-"""Vídeos de YouTube con mpv + yt-dlp: sin anuncios, a pantalla completa y controlables por voz y gestos.
+"""YouTube videos with mpv + yt-dlp: ad-free, full screen, and controllable by voice and gestures.
 
-mpv se lanza como proceso aparte con un servidor IPC (tubería con nombre); cada orden abre la tubería,
-manda una línea JSON y lee su respuesta.
+mpv is launched as a separate process with an IPC server (named pipe); each command opens the pipe,
+sends one JSON line and reads its reply.
 """
 
 import json
@@ -17,7 +17,7 @@ log = logging.getLogger("video")
 MPV = Path(r"C:\Program Files\MPV Player\mpv.exe")
 YTDLP = Path(sys.executable).with_name("yt-dlp.exe")
 PIPE = r"\\.\pipe\pepito-mpv"
-# 1080p como mucho y sin AV1 (esta gráfica no lo decodifica: iría a tirones)
+# 1080p at most and no AV1 (this GPU cannot decode it: it would stutter)
 FORMAT = "bestvideo[height<=1080][vcodec!^=av01]+bestaudio/best[height<=1080]/best"
 
 
@@ -37,7 +37,7 @@ class VideoPlayer:
         return f"{int(r['w'])}x{int(r['h'])}+{int(r['x'])}+{int(r['y'])}"
 
     def set_rect(self, rect: dict) -> None:
-        """El recuadro del widget se ha movido o cambiado de tamaño: la ventana va detrás."""
+        """The widget box moved or was resized: the window follows."""
         self.rect = rect
         if self.playing():
             self._send(["set_property", "geometry", self._geometry()])
@@ -51,10 +51,10 @@ class VideoPlayer:
 
     def play(self, video_id: str, title: str = "", rect: dict | None = None) -> None:
         if not self.available:
-            raise RuntimeError("Falta el reproductor mpv")
+            raise RuntimeError("The mpv player is missing")
         self.stop()
-        # sin bordes y encima del recuadro del widget (rect en píxeles de pantalla); si no hay, abajo a la derecha.
-        # Pantalla completa con el botón o «ponlo en grande»
+        # borderless and on top of the widget box (rect in screen pixels); if there is none, bottom right.
+        # Full screen with the button or "make it big"
         self.rect = rect or self.rect
         args = [str(MPV), f"--geometry={self._geometry()}", "--ontop", "--no-border", "--force-window=immediate", "--keep-open=no", "--hwdec=auto-safe",
                 f"--input-ipc-server={PIPE}", f"--ytdl-format={FORMAT}", "--volume=90", "--osd-level=1",
@@ -63,7 +63,7 @@ class VideoPlayer:
         self._proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                       creationflags=subprocess.CREATE_NO_WINDOW)
         self.title, self.video_id = title, video_id
-        log.info("Vídeo: %s (%s)", title, video_id)
+        log.info("Video: %s (%s)", title, video_id)
 
     def stop(self) -> None:
         proc, self._proc = self._proc, None
@@ -76,7 +76,7 @@ class VideoPlayer:
         self.title = self.video_id = ""
 
     def _send(self, command: list):
-        """Manda una orden a mpv y devuelve su `data` (None si falla)."""
+        """Sends a command to mpv and returns its `data` (None on failure)."""
         with self._lock:
             self._req += 1
             req = self._req
@@ -121,7 +121,7 @@ class VideoPlayer:
 
     def status(self) -> dict:
         if not self.playing():
-            if self._proc is not None:   # se ha cerrado (fin del vídeo o la X de mpv)
+            if self._proc is not None:   # it has closed (end of the video or mpv's X button)
                 self._proc = None
                 self.title = self.video_id = ""
             return {"playing": False}

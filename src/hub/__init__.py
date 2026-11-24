@@ -1,4 +1,4 @@
-"""Asistente de voz y panel, parte de Cortex."""
+"""Voice assistant and dashboard, part of Cortex."""
 
 
 def main() -> None:
@@ -15,15 +15,15 @@ def main() -> None:
     from .config import ROOT, settings, setup_logging
 
     setup_logging()
-    # El error de un cierre inesperado sale por stderr, que run.ps1 no guarda: que quede en el registro.
+    # Crash errors go to stderr, which run.ps1 does not keep: make sure they reach the log.
     log = logging.getLogger("hub")
-    sys.excepthook = lambda t, e, tb: log.critical("Error sin capturar; Cortex se cierra", exc_info=(t, e, tb))
-    threading.excepthook = lambda a: log.critical("Error sin capturar en el hilo %s", a.thread and a.thread.name,
+    sys.excepthook = lambda t, e, tb: log.critical("Uncaught error; Cortex is shutting down", exc_info=(t, e, tb))
+    threading.excepthook = lambda a: log.critical("Uncaught error in thread %s", a.thread and a.thread.name,
                                                   exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
-    # y si revienta por debajo de Python (una librería nativa), al menos la pila de cada hilo
+    # and if it dies below Python (a native library), at least keep each thread's stack
     faulthandler.enable(open(ROOT / "logs" / "crash.log", "a", encoding="utf-8"), all_threads=True)
     try:
         uvicorn.run("hub.app:app", host="127.0.0.1", port=settings["ui_port"], log_level="warning")
     except BaseException:
-        log.critical("Cortex se cierra por un error", exc_info=True)
+        log.critical("Cortex is shutting down because of an error", exc_info=True)
         raise

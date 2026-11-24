@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Cortex · ventanas con gestos (demo)</title>
+<title>Cortex · window gestures (demo)</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;flex-direction:column;gap:14px;padding:16px;background:#0b0d10;color:#e8eaed;font:16px/1.5 system-ui,sans-serif}
@@ -22,14 +22,14 @@ button:focus-visible,a:focus-visible,.win:focus-visible{outline:3px solid #fff;o
 footer p{margin:0;flex:1;min-width:240px;color:#b9bec6}
 @media (prefers-reduced-motion:reduce){.win{transition:none}}
 </style></head><body>
-<header><h1>Ventanas con gestos <small>· funciona en este navegador</small></h1><button type="button" id="camBtn">Activar la cámara</button><a href="/demo/">Panel</a><a href="/">Inicio</a></header>
-<main id="desk" aria-label="Escritorio de ejemplo">
-  <div class="win" tabindex="0" role="group" aria-label="Ventana Notas. Flechas: izquierda, derecha, arriba maximiza, abajo restaura"><b>Notas</b><p>Pellizca (pulgar e índice) para cogerme.</p></div>
-  <div class="win" tabindex="0" role="group" aria-label="Ventana Música"><b>Música</b><p>Suéltame en un lateral y encajo media pantalla.</p></div>
-  <div class="win" tabindex="0" role="group" aria-label="Ventana Fotos"><b>Fotos</b><p>Cierra el puño encima y ábrelo: me maximizo.</p></div>
+<header><h1>Window gestures <small>· works in this browser</small></h1><button type="button" id="camBtn">Turn on the camera</button><a href="/demo/">Dashboard</a><a href="/">Home</a></header>
+<main id="desk" aria-label="Sample desktop">
+  <div class="win" tabindex="0" role="group" aria-label="Notes window. Arrow keys: left, right, up maximizes, down restores"><b>Notes</b><p>Pinch (thumb and index finger) to grab me.</p></div>
+  <div class="win" tabindex="0" role="group" aria-label="Music window"><b>Music</b><p>Drop me at a side and I snap to half the screen.</p></div>
+  <div class="win" tabindex="0" role="group" aria-label="Photos window"><b>Photos</b><p>Close your fist over me and open it: I maximize.</p></div>
   <div id="zone" hidden></div><div id="cursor" hidden></div>
 </main>
-<footer><video id="cam" muted playsinline aria-label="Tu cámara"></video>
-<p><b id="status" role="status">Arrastra con el ratón, o activa la cámara.</b><br>La imagen se procesa en tu equipo y no se envía. Al activarla se descarga el modelo de manos (MediaPipe, de jsDelivr y Google). El programa de Windows mueve tus ventanas de verdad.</p></footer>
+<footer><video id="cam" muted playsinline aria-label="Your camera"></video>
+<p><b id="status" role="status">Drag with the mouse, or turn on the camera.</b><br>The image is processed on your computer and never sent. Turning it on downloads the hand model (MediaPipe, from jsDelivr and Google). The Windows app moves your real windows.</p></footer>
 <script type="module" src="/demo/gestures.mjs"></script>
 </body></html>

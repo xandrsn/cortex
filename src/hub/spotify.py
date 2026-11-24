@@ -1,8 +1,8 @@
-"""Spotify con la cuenta personal del usuario (Web API, modo desarrollo, Premium).
+"""Spotify with the user's personal account (Web API, development mode, Premium).
 
-Login por PKCE: solo hace falta el Client ID de la app de Spotify (en .env, SPOTIFY_CLIENT_ID); el token
-se guarda en C:la carpeta del programa\\secrets, nunca en Drive. Por defecto suena en el Spotify de escritorio del
-portátil (sale por el altavoz de Windows); se puede elegir otro dispositivo Connect en Ajustes.
+PKCE login: only the Spotify app's Client ID is needed (in .env, SPOTIFY_CLIENT_ID); the token is
+stored in the program folder's \\secrets, never on Drive. By default it plays on the laptop's desktop Spotify
+(through the Windows speaker); another Connect device can be chosen in Settings.
 """
 
 import base64
@@ -38,7 +38,7 @@ LIKED = {"me gusta", "tus me gusta", "canciones que me gustan", "mis me gusta", 
 
 
 class SpotifyError(Exception):
-    """Error con mensaje para decir en voz alta."""
+    """Error with a message to say out loud."""
 
 
 def norm(text: str) -> str:
@@ -54,13 +54,13 @@ class Spotify:
         self._verifier = ""
         self._state = ""
         self._lock = threading.Lock()
-        # un cliente para todo: reutiliza la conexión y no crea el contexto TLS en cada consulta (cada 5 s)
+        # one client for everything: reuses the connection and does not create the TLS context on every query (every 5 s)
         self._http = httpx.Client(timeout=10)
         self._playlists: list[dict] = []
         self._playlists_at = 0.0
         self._user_id = ""
         self._ducked_volume: int | None = None
-        self._restored: tuple[int, int, float] | None = None   # (volumen devuelto, el bajado, cuándo)
+        self._restored: tuple[int, int, float] | None = None   # (restored volume, the lowered one, when)
         self.last_state: dict = {}
         if TOKEN_FILE.exists():
             self._token = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
@@ -76,7 +76,7 @@ class Spotify:
 
     def login_url(self) -> str:
         if not self.client_id:
-            raise SpotifyError("Falta el SPOTIFY_CLIENT_ID en el .env")
+            raise SpotifyError("SPOTIFY_CLIENT_ID is missing from the .env")
         self._verifier = secrets.token_urlsafe(64)
         self._state = secrets.token_urlsafe(16)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(self._verifier.encode()).digest()).rstrip(b"=").decode()
@@ -87,11 +87,11 @@ class Spotify:
 
     def finish_login(self, code: str, state: str) -> None:
         if not self._state or state != self._state:
-            raise SpotifyError("La respuesta de Spotify no coincide con el login que empecé")
+            raise SpotifyError("Spotify's response does not match the login I started")
         self._token_request({"grant_type": "authorization_code", "code": code, "redirect_uri": self.redirect_uri,
                              "client_id": self.client_id, "code_verifier": self._verifier})
         self._state = ""
-        log.info("Spotify conectado")
+        log.info("Spotify connected")
 
     def logout(self) -> None:
         self._token = {}
@@ -101,9 +101,9 @@ class Spotify:
         try:
             r = self._http.post("https://accounts.spotify.com/api/token", data=data)
         except httpx.HTTPError as e:
-            raise SpotifyError("No llego a Spotify, ¿hay internet?") from e
+            raise SpotifyError("I cannot reach Spotify. Is there internet?") from e
         if r.status_code != 200:
-            raise SpotifyError(f"Spotify no me deja entrar ({r.status_code})")
+            raise SpotifyError(f"Spotify will not let me in ({r.status_code})")
         token = r.json()
         token["expires_at"] = time.time() + token.get("expires_in", 3600) - 60
         if "refresh_token" not in token:
@@ -114,7 +114,7 @@ class Spotify:
 
     def _access_token(self) -> str:
         if not self.connected:
-            raise SpotifyError("Spotify no está conectado. Conéctalo en Ajustes.")
+            raise SpotifyError("Spotify is not connected. Connect it in Settings.")
         if time.time() > self._token.get("expires_at", 0):
             self._token_request({"grant_type": "refresh_token", "refresh_token": self._token["refresh_token"],
                                  "client_id": self.client_id})
@@ -132,20 +132,20 @@ class Spotify:
                     headers = {"Authorization": f"Bearer {self._access_token()}"}
                 r = self._http.request(method, API + path, headers=headers, **kwargs)
         except httpx.HTTPError as e:
-            raise SpotifyError("No llego a Spotify, ¿hay internet?") from e
+            raise SpotifyError("I cannot reach Spotify. Is there internet?") from e
         if r.status_code == 204 or not r.content:
             return None
         if r.status_code == 404 and "NO_ACTIVE_DEVICE" in r.text:
-            raise SpotifyError("No hay ningún dispositivo de Spotify activo.")
+            raise SpotifyError("There is no active Spotify device.")
         if r.status_code == 403 and "PREMIUM" in r.text.upper():
-            raise SpotifyError("Spotify dice que eso necesita Premium.")
+            raise SpotifyError("Spotify says that needs Premium.")
         if r.status_code >= 400:
             log.warning("Spotify %s %s → %s %s", method, path, r.status_code, r.text[:200])
-            raise SpotifyError("Spotify no ha querido hacerlo.")
+            raise SpotifyError("Spotify would not do it.")
         try:
             return r.json()
         except ValueError:
-            return None   # pausa/reanudar a veces responden 200 con un cuerpo que no es JSON
+            return None   # pause/resume sometimes answer 200 with a non-JSON body
 
     def devices(self) -> list[dict]:
         return (self._api("GET", "/me/player/devices") or {}).get("devices", [])
@@ -156,7 +156,7 @@ class Spotify:
         return name.lower() in (host, host[:15], os.environ.get("COMPUTERNAME", "").lower())
 
     def _find_device(self, wanted: str = "") -> str:
-        """Id del dispositivo pedido (vacío = el portátil); si es el portátil y Spotify no está abierto, lo abre."""
+        """Id of the requested device (empty = the laptop); if it is the laptop and Spotify is not open, opens it."""
         laptop = not wanted
         for attempt in range(12):
             devices = self.devices()
@@ -169,22 +169,22 @@ class Spotify:
                 close = close or [names[n] for n in difflib.get_close_matches(norm(wanted), list(names), n=1, cutoff=0.5)]
                 if close:
                     return close[0]["id"]
-                raise SpotifyError(f"No encuentro el dispositivo {wanted} en Spotify.")
+                raise SpotifyError(f"I cannot find the device {wanted} in Spotify.")
             if attempt == 0 and SPOTIFY_EXE.exists():
-                log.info("Abriendo Spotify de escritorio")
+                log.info("Opening desktop Spotify")
                 subprocess.Popen([str(SPOTIFY_EXE), "--minimized"], creationflags=subprocess.CREATE_NO_WINDOW)
             time.sleep(1.5)
-        raise SpotifyError("Spotify no arranca en el portátil. Ábrelo a mano.")
+        raise SpotifyError("Spotify will not start on the laptop. Open it by hand.")
 
     def _target_device(self) -> str:
-        """Dónde poner música nueva: donde ya esté sonando, o si no el dispositivo de Ajustes (o el portátil)."""
+        """Where to play new music: where it is already playing, otherwise the Settings device (or the laptop)."""
         state = self._api("GET", "/me/player") or {}
         if state.get("is_playing") and state.get("device", {}).get("id"):
             return state["device"]["id"]
         return self._find_device(settings["spotify_device"])
 
     def move_to(self, device: str) -> None:
-        """Pasa la reproducción a ese aparato. Los Echo a veces aceptan el cambio y no arrancan: se insiste."""
+        """Moves playback to that device. Echos sometimes accept the switch and do not start: keep trying."""
         self._api("PUT", "/me/player", json={"device_ids": [device], "play": True})
         for _ in range(3):
             time.sleep(1.5)
@@ -194,11 +194,11 @@ class Spotify:
                 b = self._api("GET", "/me/player") or {}
                 if (b.get("progress_ms") or 0) > (a.get("progress_ms") or 0):
                     return
-            log.info("El aparato no arranca; insisto")
+            log.info("The device does not start; trying again")
             self._api("PUT", f"/me/player/play?device_id={device}")
 
     def transfer(self, where: str) -> str:
-        """Pasa la música a otro dispositivo («aquí», «el echo», «el pc»…). Devuelve su nombre."""
+        """Moves the music to another device ("aquí", "el echo", "el pc"...). Returns its name."""
         w = norm(where)
         if re.fullmatch(r"(este (dispositivo|ordenador|portatil)|aqui|el portatil|portatil|ordenador|this (device|"
                         r"computer)|here|laptop)", w):
@@ -211,14 +211,14 @@ class Spotify:
         device = self._find_device(target)
         self.move_to(device)
         name = next((d["name"] for d in self.devices() if d["id"] == device), where)
-        return "el portátil" if self._is_laptop(name) else name
+        return "the laptop" if self._is_laptop(name) else name
 
     def _play(self, body: dict) -> None:
         device = self._target_device()
         self._ducked_volume = None
         self._api("PUT", f"/me/player/play?device_id={device}", json=body)
 
-    # ---------- órdenes ----------
+    # ---------- commands ----------
     def playlists(self) -> list[dict]:
         if time.time() - self._playlists_at > 600:
             items, url = [], "/me/playlists?limit=50"
@@ -235,7 +235,7 @@ class Spotify:
             if not self._user_id:
                 self._user_id = self._api("GET", "/me")["id"]
             self._play({"context_uri": f"spotify:user:{self._user_id}:collection"})
-            return "tus Me gusta"
+            return "your Liked Songs"
         lists = self.playlists()
         names = {norm(p["name"]): p for p in lists}
         match = names.get(wanted)
@@ -244,12 +244,12 @@ class Spotify:
             close = difflib.get_close_matches(wanted, list(names), n=1, cutoff=0.55)
             match = contains[0] if contains else names[close[0]] if close else None
         if not match:
-            raise SpotifyError(f"No encuentro ninguna playlist tuya que se llame {name}.")
+            raise SpotifyError(f"I cannot find any playlist of yours called {name}.")
         self._play({"context_uri": match["uri"]})
         return match["name"]
 
     def play_query(self, query: str, kind: str = "any") -> str:
-        """Busca y pone: artista si coincide claramente (o si se pidió «música de»), si no la canción."""
+        """Searches and plays: the artist if it clearly matches (or if \"música de\" was asked for), otherwise the song."""
         data = self._api("GET", "/search", params={"q": query, "type": "artist,track", "limit": 5})
         artists = data.get("artists", {}).get("items", [])
         tracks = data.get("tracks", {}).get("items", [])
@@ -259,11 +259,11 @@ class Spotify:
         if tracks:
             t = tracks[0]
             self._play({"uris": [t["uri"]]})
-            return f"{t['name']}, de {t['artists'][0]['name']}"
+            return f"{t['name']}, by {t['artists'][0]['name']}"
         if artists:
             self._play({"context_uri": artists[0]["uri"]})
             return artists[0]["name"]
-        raise SpotifyError(f"No encuentro nada de {query} en Spotify.")
+        raise SpotifyError(f"I cannot find anything for {query} on Spotify.")
 
     def pause(self) -> None:
         self._api("PUT", "/me/player/pause")
@@ -291,7 +291,7 @@ class Spotify:
     def change_volume(self, delta: int) -> int:
         current = (self.state().get("device") or {}).get("volume_percent")
         if current is None:
-            raise SpotifyError("No sé a qué volumen está Spotify ahora.")
+            raise SpotifyError("I do not know what volume Spotify is at right now.")
         return self.set_volume(current + delta)
 
     def state(self) -> dict:
@@ -303,9 +303,9 @@ class Spotify:
         item = self.state().get("item")
         if not item:
             return ""
-        return f"{item['name']}, de {', '.join(a['name'] for a in item.get('artists', []))}"
+        return f"{item['name']}, by {', '.join(a['name'] for a in item.get('artists', []))}"
 
-    # ---------- bajar la música mientras habla Cortex ----------
+    # ---------- lower the music while Cortex speaks ----------
     def duck(self) -> None:
         if self._ducked_volume is not None:
             return
@@ -314,18 +314,18 @@ class Spotify:
         volume = device.get("volume_percent")
         if not state.get("is_playing") or volume is None or not device.get("supports_volume", True):
             return
-        # algunos altavoces (Alexa) tardan en informar del volumen nuevo: si aún dice el bajado de hace un
-        # momento, el de verdad es el que se devolvió (si no, cada aviso hundiría la música un poco más)
+        # some speakers (Alexa) are slow to report the new volume: if it still shows the lowered one from a
+        # moment ago, the real one is the one that was restored (otherwise each notice would sink the music a bit more)
         if self._restored and volume == self._restored[1] and time.monotonic() - self._restored[2] < 180:
             volume = self._restored[0]
         self._ducked_volume = volume
-        self._api("PUT", f"/me/player/volume?volume_percent={max(10, volume // 2)}")   # a la mitad: que se oiga a Cortex sin hundir la música
+        self._api("PUT", f"/me/player/volume?volume_percent={max(10, volume // 2)}")   # halve it: so Cortex is heard without sinking the music
 
     def unduck(self) -> None:
         volume, self._ducked_volume = self._ducked_volume, None
         if volume is None:
             return
-        for attempt in range(3):   # si falla, la música se quedaría a la mitad hasta que alguien la suba
+        for attempt in range(3):   # if it fails, the music would stay at half until someone raises it
             try:
                 self._api("PUT", f"/me/player/volume?volume_percent={volume}")
                 self._restored = (volume, max(10, volume // 2), time.monotonic())
@@ -336,7 +336,7 @@ class Spotify:
                 time.sleep(1)
 
     def summary(self) -> dict:
-        """Lo que necesita el widget del panel."""
+        """What the panel widget needs."""
         s = self.last_state
         item = s.get("item") or {}
         images = (item.get("album") or {}).get("images") or []

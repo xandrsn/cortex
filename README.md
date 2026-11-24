@@ -94,7 +94,12 @@ installer/        Inno Setup scripts   tests/    pytest + node tests
 ## Known limits
 
 - Windows only (Win32 APIs, pycaw, comtypes).
+- Speech recognition is Spanish-only for now: multilingual recognition was not reliable enough. The interface, notices and typed chat default to English, and the LLM answers in the language you use.
 - The gesture runtime and calibration need a real webcam; automated tests cover the logic, API and protocol, not live video.
 - Large speech models are downloaded on first use or copied into `models\`, not bundled.
 - Spotify, bank and WhatsApp need their own accounts and keys and are the least tested parts.
 - WhatsApp support uses an unofficial client; WhatsApp may limit the account. The assistant never sends messages on its own.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

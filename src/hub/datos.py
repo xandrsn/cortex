@@ -1,7 +1,7 @@
-"""Datos de Charlie en la carpeta de Drive: lectura, respuestas locales, widgets y estado.md.
+"""The user's data in the Drive folder: reading, local answers, widgets and estado.md.
 
-Los ficheros los edita Charlie a mano o Claude; aquí solo se leen. estado.md se regenera solo cuando
-cambia algún fichero (o el día), para que el Claude del móvil, que lee Drive, sepa cómo va todo.
+The files are edited by hand or by Claude; here they are only read. estado.md is regenerated on its own when
+any file (or the day) changes, so the mobile Claude, which reads Drive, knows how everything stands.
 """
 
 import logging
@@ -20,6 +20,8 @@ DAYS_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "dom
 DAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
              "noviembre", "diciembre"]
+MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+             "November", "December"]
 SOURCES = ["horario.yaml", "gym.yaml", "comidas.yaml", "dinero.yaml", "betis.yaml", "tareas.yaml", "fechas.yaml",
            "avisos.yaml", "dudas.md", "quitado.md"]
 PRIORITY = {"alta": 0, "media": 1, "baja": 2}
@@ -36,7 +38,7 @@ def load(name: str) -> dict:
     except FileNotFoundError:
         return {}
     except yaml.YAMLError as e:
-        log.error("%s no es YAML válido: %s", name, e)
+        log.error("%s is not valid YAML: %s", name, e)
         return {}
 
 
@@ -53,7 +55,15 @@ def _as_date(value) -> date | None:
     return None
 
 
-def say_date(d: date, today: date) -> str:
+def say_date(d: date, today: date, en: bool = True) -> str:
+    if en:
+        if d == today:
+            return "today"
+        if d == today + timedelta(days=1):
+            return "tomorrow"
+        if 0 < (d - today).days < 7:
+            return f"on {DAYS_EN[d.weekday()]}"
+        return f"on {DAYS_EN[d.weekday()]}, {MONTHS_EN[d.month - 1]} {d.day}"
     if d == today:
         return "hoy"
     if d == today + timedelta(days=1):
@@ -63,7 +73,7 @@ def say_date(d: date, today: date) -> str:
     return f"el {DAYS_ES[d.weekday()]} {d.day} de {MONTHS_ES[d.month - 1]}"
 
 
-# ---------- horario ----------
+# ---------- schedule ----------
 def work_mode(d: date) -> str | None:
     horario = load("horario.yaml")
     for change in horario.get("cambios") or []:
@@ -73,7 +83,7 @@ def work_mode(d: date) -> str | None:
 
 
 def day_plan(d: date) -> list[dict]:
-    """Lista ordenada de {hora, fin?, que} para ese día."""
+    """Ordered list of {hora, fin?, que} for that day."""
     horario = load("horario.yaml")
     key = DAYS[d.weekday()]
     day = horario.get("dias", {}).get(key) or {}
@@ -116,10 +126,10 @@ def gym_of(d: date) -> str | None:
     return (load("gym.yaml").get("dias") or {}).get(DAYS[d.weekday()])
 
 
-# ---------- tareas, Betis, fechas ----------
+# ---------- tasks, Betis, dates ----------
 def tasks(limit: int | None = None) -> list[dict]:
     data = load("tareas.yaml")
-    # «i» es su posición en tareas.yaml: el panel la usa para editar o quitar esa tarea
+    # "i" is its position in tareas.yaml: the panel uses it to edit or remove that task
     items = [{**t, "i": i} for i, t in enumerate(data.get("pendientes") or [])
              if isinstance(t, dict) and str(t.get("estado", "")).lower() != "hecha"]
 
@@ -174,7 +184,7 @@ def open_doubts() -> list[str]:
     return [r.split("|")[1].strip() for r in rows if r.count("|") >= 3]
 
 
-# ---------- respuestas locales (sin Claude) ----------
+# ---------- local answers (without Claude) ----------
 def norm_text(s: str) -> str:
     from .spotify import norm
     return norm(s)
@@ -186,49 +196,65 @@ def _join(parts: list[str], en: bool = False) -> str:
     return ", ".join(parts[:-1]) + (" and " if en else " y ") + parts[-1]
 
 
-def _item(it: dict) -> str:
+def _item(it: dict, en: bool = False) -> str:
     h = str(it.get("hora", ""))
     que = it["que"].split(":")[0] if it["que"].startswith("Rutina") else it["que"]
     que = que.split(". ")[0]
+    if en:
+        return f"{que[0].lower() + que[1:]} at {h}" if re.fullmatch(r"\d\d:\d\d", h) else f"{que[0].lower() + que[1:]} {h}".strip()
     if re.fullmatch(r"\d\d:\d\d", h):
         return f"a las {h} {que[0].lower() + que[1:]}"
     return f"{h} {que[0].lower() + que[1:]}".strip()
 
 
-def answer(intent: str, now: datetime) -> str:
+def answer(intent: str, now: datetime, en: bool = False) -> str:
+    """Spoken answer for a schedule question, in English or Spanish (`en`)."""
     today = now.date()
     if intent == "hoy":
         items = remaining(now)[:5]
         if not items:
-            return "Hoy ya no te queda nada en el horario."
+            return "Nothing left on your schedule today." if en else "Hoy ya no te queda nada en el horario."
+        if en:
+            return "Left today: " + _join([_item(i, True) for i in items], True) + "."
         return "Te queda " + _join([_item(i) for i in items]) + "."
     if intent == "manana":
         d = today + timedelta(days=1)
         items = [i for i in day_plan(d) if not i["que"].startswith(("Rutina", "Andando", "Desayuno", "Merienda",
                                                                     "Dormir", "Comida"))][:5]
         mode = work_mode(d)
+        if en:
+            head = f"Tomorrow, {DAYS_EN[d.weekday()]}" + (f", {mode}" if mode else "")
+            return head + (": " + _join([_item(i, True) for i in items], True) + "." if items else ", nothing special.")
         head = f"Mañana {DAYS_ES[d.weekday()]}" + (f", {mode}" if mode else "")
         return head + (": " + _join([_item(i) for i in items]) + "." if items else ", sin nada especial.")
     if intent == "gym":
         g = gym_of(today)
         if g:
-            return f"Hoy toca {g[0].lower() + g[1:]}."
+            return f"Today it's {g[0].lower() + g[1:]}." if en else f"Hoy toca {g[0].lower() + g[1:]}."
         g = gym_of(today + timedelta(days=1))
+        if en:
+            return "No gym today." + (f" Tomorrow it's {g[0].lower() + g[1:]}." if g else "")
         return "Hoy no hay gym." + (f" Mañana toca {g[0].lower() + g[1:]}." if g else "")
     if intent == "tareas":
         items = tasks(5)
         if not items:
-            return "No tienes tareas pendientes."
-        return f"Tienes {len(tasks())} pendientes. Las gordas: " + _join([t["tarea"].split(":")[0] for t in items]) + "."
+            return "You have no pending tasks." if en else "No tienes tareas pendientes."
+        names = _join([t["tarea"].split(":")[0] for t in items], en)
+        if en:
+            return f"You have {len(tasks())} pending. The big ones: " + names + "."
+        return f"Tienes {len(tasks())} pendientes. Las gordas: " + names + "."
     if intent == "betis":
         m = next_matches(today, 1)
         if not m:
-            return "No tengo más partidos del Betis apuntados."
+            return "I have no more Betis matches noted." if en else "No tengo más partidos del Betis apuntados."
         m = m[0]
         if "confirmar" in norm_text(f"{m['partido']} {m.get('hora', '')}"):
-            return ""   # faltan datos: que lo busque Claude en internet
+            return ""   # data missing: let Claude look it up online
         hora = str(m.get("hora", ""))
-        when = say_date(_as_date(m["fecha"]), today)
+        when = say_date(_as_date(m["fecha"]), today, en)
+        if en:
+            hora_txt = f" at {hora}" if re.fullmatch(r"~?\d\d:\d\d", hora) else f", time {hora.lower()}"
+            return f"{when[0].upper() + when[1:]}, {m['partido']}{hora_txt.replace('~', 'around ').replace('at around', 'around')}."
         hora_txt = f" a las {hora}" if re.fullmatch(r"~?\d\d:\d\d", hora) else f", hora {hora.lower()}"
         return f"{when[0].upper() + when[1:]}, {m['partido']}{hora_txt.replace('~', 'sobre las ').replace('a las sobre', 'sobre')}."
     return ""
@@ -244,20 +270,33 @@ INTENTS = [
     (r"(cuando juega el betis|(cual es el |cuando es el )?proximo partido( del betis)?|a que hora juega el betis|"
      r"cuando es el partido del betis)", "betis"),
 ]
+# English equivalents (text goes through spotify.norm first: lowercase, no punctuation)
+INTENTS_EN = [
+    (r"(what (do i have|is left|s left|s on|is on) (today|for today|left today)|what s left|how is the day going|"
+     r"what is on today)", "hoy"),
+    (r"(what (do i have|is|s) (on )?tomorrow|what is on tomorrow|how is tomorrow)", "manana"),
+    (r"(what is (my )?(gym|workout)( today)?|what s (my )?(gym|workout)( today)?|what do i train today|"
+     r"what is my workout)", "gym"),
+    (r"(what tasks do i have|my tasks|read (me )?(my )?tasks|pending tasks|what is pending)", "tareas"),
+    (r"(when does betis play|when is the next betis (game|match)|next betis (game|match)|when is the next (game|match))",
+     "betis"),
+]
 
 
 def route(text: str) -> str | None:
+    """Answer a schedule question locally; replies in the language of the phrase that matched."""
     from .spotify import norm
     t = norm(text)
     t = re.sub(r"^(oye |hey |venga )?(cortex )?", "", t)
-    t = re.sub(r" ?(por favor|porfa|cortex)$", "", t).strip()
-    for pattern, intent in INTENTS:
-        if re.fullmatch(pattern, t):
-            try:
-                return answer(intent, datetime.now()) or None
-            except Exception:
-                log.exception("Error respondiendo %s en local", intent)
-                return None
+    t = re.sub(r" ?(por favor|porfa|please|cortex)$", "", t).strip()
+    for patterns, en in ((INTENTS, False), (INTENTS_EN, True)):
+        for pattern, intent in patterns:
+            if re.fullmatch(pattern, t):
+                try:
+                    return answer(intent, datetime.now(), en) or None
+                except Exception:
+                    log.exception("Error answering %s locally", intent)
+                    return None
     return None
 
 
@@ -270,17 +309,17 @@ def summary() -> dict:
     menu = comidas.get("menu") or {}
     return {
         "ok": folder().exists(),
-        "today": {"items": remaining(now), "mode": work_mode(today), "day": DAYS_ES[today.weekday()]},
+        "today": {"items": remaining(now), "mode": work_mode(today), "day": DAYS_EN[today.weekday()]},
         "gym": {"today": gym_of(today), "tomorrow": gym_of(today + timedelta(days=1)),
                 "notes": (load("gym.yaml").get("notas") or []),
-                "week": [{"dia": DAYS_ES[DAYS.index(k)], "que": v, "hoy": k == DAYS[today.weekday()]}
+                "week": [{"dia": DAYS_EN[DAYS.index(k)], "que": v, "hoy": k == DAYS[today.weekday()]}
                          for k, v in (load("gym.yaml").get("dias") or {}).items() if k in DAYS]},
         "tasks": [{"i": t["i"], "tarea": t["tarea"], "prioridad": t.get("prioridad", "media"), "notas": str(t.get("notas") or ""),
                    "cuando": t.get("cuando") or (str(t["fecha"]) if t.get("fecha") else ""),
                    "estado": str(t.get("estado", ""))} for t in tasks()],
         "betis": [{**m, "fecha": str(m["fecha"]), "cuando": say_date(_as_date(m["fecha"]), today)}
                   for m in next_matches(today, 4)],
-        "menu": [{"dia": DAYS_ES[DAYS.index(k)], "plato": v.get("plato"), "cubre": v.get("cubre"),
+        "menu": [{"dia": DAYS_EN[DAYS.index(k)], "plato": v.get("plato"), "cubre": v.get("cubre"),
                   "hoy": DAYS.index(k) == today.weekday()} for k, v in menu.items() if k in DAYS],
         "money": {"queda": dinero.get("queda_aprox"), "colchon": (dinero.get("colchon") or {}).get("ahorrado"),
                   "gastos": dinero.get("gastos_fijos") or {}, "ingresos": dinero.get("ingresos") or {}},
@@ -293,81 +332,81 @@ def build_estado(now: datetime) -> str:
     today = now.date()
     tomorrow = today + timedelta(days=1)
     L = [
-        f"# Estado de {settings['user_name'] or 'el usuario'}",
+        f"# Status of {settings['user_name'] or 'the user'}",
         "",
-        "> Resumen automático que mantiene Cortex (el asistente de casa) para el Claude del móvil. **No lo edites:**",
-        "> se regenera solo. Los datos de verdad están en los otros ficheros de esta carpeta (ver CLAUDE.md).",
+        "> Automatic summary kept by Cortex (the home assistant) for the mobile Claude. **Do not edit it:**",
+        "> it regenerates itself. The real data lives in the other files of this folder (see CLAUDE.md).",
         "",
-        f"Actualizado: {DAYS_ES[now.weekday()]} {now:%d/%m/%Y %H:%M} (hora de Madrid)",
+        f"Updated: {DAYS_EN[now.weekday()]} {now:%d/%m/%Y %H:%M} (Madrid time)",
         "",
-        f"## Hoy, {DAYS_ES[today.weekday()]} {today:%d/%m}" + (f" · {work_mode(today)}" if work_mode(today) else ""),
+        f"## Today, {DAYS_EN[today.weekday()]} {today:%d/%m}" + (f" · {work_mode(today)}" if work_mode(today) else ""),
         "",
     ]
     for it in day_plan(today):
         L.append(f"- {it.get('hora', '')}{'–' + it['fin'] if it.get('fin') else ''} {it['que']}".replace("-  ", "- "))
-    L += ["", f"## Mañana, {DAYS_ES[tomorrow.weekday()]} {tomorrow:%d/%m}" +
+    L += ["", f"## Tomorrow, {DAYS_EN[tomorrow.weekday()]} {tomorrow:%d/%m}" +
           (f" · {work_mode(tomorrow)}" if work_mode(tomorrow) else ""), ""]
     extras = [i for i in day_plan(tomorrow) if i["que"].startswith(("Gym", "Curro", "Lavadora", "Tender", "Limpieza",
                                                                      "Compra", "Llamada", "Batch", "Levantarse"))]
-    L += [f"- {i.get('hora', '')} {i['que']}" for i in extras] or ["- Nada especial"]
+    L += [f"- {i.get('hora', '')} {i['que']}" for i in extras] or ["- Nothing special"]
 
-    L += ["", "## Tareas pendientes", "", "| Tarea | Cuándo | Prioridad | Estado |", "|---|---|---|---|"]
+    L += ["", "## Pending tasks", "", "| Task | When | Priority | Status |", "|---|---|---|---|"]
     for t in tasks():
         cuando = t.get("cuando") or (str(t["fecha"]) if t.get("fecha") else "")
         L.append(f"| {t['tarea']} | {cuando} | {t.get('prioridad', '')} | {t.get('estado', '')} |")
 
-    L += ["", "## Próximas fechas (3 semanas)", ""]
-    L += [f"- {d:%d/%m} ({DAYS_ES[d.weekday()]}): {q}" for d, q in upcoming_dates(today, 21)] or ["- Nada"]
+    L += ["", "## Upcoming dates (3 weeks)", ""]
+    L += [f"- {d:%d/%m} ({DAYS_EN[d.weekday()]}): {q}" for d, q in upcoming_dates(today, 21)] or ["- Nothing"]
 
-    L += ["", "## Betis", "", "| Fecha | Partido | Hora | Nota |", "|---|---|---|---|"]
+    L += ["", "## Betis", "", "| Date | Match | Time | Note |", "|---|---|---|---|"]
     for m in next_matches(today, 4):
         d = _as_date(m["fecha"])
-        L.append(f"| {DAYS_ES[d.weekday()][:3]} {d:%d/%m} | {m['partido']} | {m.get('hora', '')} | {m.get('nota', '')} |")
+        L.append(f"| {DAYS_EN[d.weekday()][:3]} {d:%d/%m} | {m['partido']} | {m.get('hora', '')} | {m.get('nota', '')} |")
     L.append("")
-    L.append("Días de partido: camiseta del Betis. Horarios: confirmar en la web oficial.")
+    L.append("Match days: Betis shirt. Times: confirm on the official website.")
 
     avisos = [a for a in load("avisos.yaml").get("avisos") or [] if a.get("activo", True)]
     if avisos:
-        L += ["", "## Avisos programados", ""]
+        L += ["", "## Scheduled reminders", ""]
         L += [f"- {a.get('cuando', '')}: {a.get('texto', '')}" for a in avisos[:10]]
 
     dinero = load("dinero.yaml")
     if dinero:
-        L += ["", "## Dinero", "",
-              f"- Queda al mes: ~{dinero.get('queda_aprox', '?')} €",
-              f"- Colchón: {(dinero.get('colchon') or {}).get('ahorrado', '?')} € "
+        L += ["", "## Money", "",
+              f"- Left per month: ~{dinero.get('queda_aprox', '?')} €",
+              f"- Cushion: {(dinero.get('colchon') or {}).get('ahorrado', '?')} € "
               f"({(dinero.get('colchon') or {}).get('regla', '')})",
-              f"- Inversión: {(dinero.get('inversion') or {}).get('regla', '')}"]
+              f"- Investing: {(dinero.get('inversion') or {}).get('regla', '')}"]
 
     comidas = load("comidas.yaml")
     if comidas:
-        L += ["", "## Comidas", "",
-              f"- Objetivo: ~{(comidas.get('objetivo') or {}).get('kcal', '?')} kcal y "
-              f"{(comidas.get('objetivo') or {}).get('proteina_g', '?')} g de proteína",
-              f"- No come: {', '.join(comidas.get('no_como') or [])}"]
+        L += ["", "## Meals", "",
+              f"- Target: ~{(comidas.get('objetivo') or {}).get('kcal', '?')} kcal and "
+              f"{(comidas.get('objetivo') or {}).get('proteina_g', '?')} g of protein",
+              f"- Does not eat: {', '.join(comidas.get('no_como') or [])}"]
         for k, v in (comidas.get("menu") or {}).items():
             if k in DAYS:
-                L.append(f"- Cocina el {DAYS_ES[DAYS.index(k)]}: {v.get('plato')} ({v.get('cubre')})")
+                L.append(f"- Cooks on {DAYS_EN[DAYS.index(k)]}: {v.get('plato')} (covers {v.get('cubre')})")
 
     gym = load("gym.yaml")
     if gym:
         L += ["", "## Gym", ""]
-        L += [f"- {DAYS_ES[DAYS.index(k)].capitalize()}: {v}" for k, v in (gym.get("dias") or {}).items() if k in DAYS]
+        L += [f"- {DAYS_EN[DAYS.index(k)]}: {v}" for k, v in (gym.get("dias") or {}).items() if k in DAYS]
         L += [f"- {n}" for n in gym.get("notas") or []]
 
     doubts = open_doubts()
     if doubts:
-        L += ["", "## Dudas abiertas (ver dudas.md)", ""] + [f"- {d}" for d in doubts]
+        L += ["", "## Open questions (see dudas.md)", ""] + [f"- {d}" for d in doubts]
 
     quitado = folder() / "quitado.md"
     if quitado.exists():
         items = [l[2:] for l in quitado.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
-        L += ["", "## No volver a sacar", "", "; ".join(items) + "."]
+        L += ["", "## Do not bring up again", "", "; ".join(items) + "."]
     return "\n".join(L) + "\n"
 
 
 class EstadoWriter:
-    """Regenera estado.md cuando cambia algún fichero de datos o el día."""
+    """Regenerates estado.md when a data file or the day changes."""
 
     def __init__(self):
         self._signature = None
@@ -388,9 +427,9 @@ class EstadoWriter:
         content = build_estado(datetime.now())
         path = folder() / "estado.md"
         old = path.read_text(encoding="utf-8") if path.exists() else ""
-        strip = lambda s: re.sub(r"^Actualizado: .*$", "", s, flags=re.M)
+        strip = lambda s: re.sub(r"^Updated: .*$", "", s, flags=re.M)
         if strip(old) != strip(content):
             path.write_text(content, encoding="utf-8")
-            log.info("estado.md actualizado")
+            log.info("estado.md updated")
         self._signature = sig
         return True

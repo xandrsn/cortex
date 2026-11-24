@@ -1,9 +1,9 @@
-"""WhatsApp: arranca el puente de whatsapp-mcp y lee sus mensajes para el panel y los avisos.
+"""WhatsApp: starts the whatsapp-mcp bridge and reads its messages for the panel and the notices.
 
-El puente (whatsapp-mcp/whatsapp-bridge, Go + whatsmeow) se vincula como «dispositivo» con un QR la primera vez
-y guarda los mensajes en store/messages.db (SQLite). Aquí se lee esa base; solo se envía lo que el
-usuario escribe en el panel, y solo si eligió «leer y escribir» (whatsapp_mode).
-El QR que pide al vincular se escribe en store/qr.txt y el panel lo pinta para escanearlo.
+The bridge (whatsapp-mcp/whatsapp-bridge, Go + whatsmeow) is linked as a "device" with a QR code the first time
+and stores messages in store/messages.db (SQLite). That database is read here; only what the user types in
+the panel is sent, and only if they chose "read and write" (whatsapp_mode).
+The QR it asks for when linking is written to store/qr.txt and the panel draws it to be scanned.
 """
 
 import logging
@@ -29,21 +29,21 @@ BRIDGE_PORT = 8080
 BRIDGE_API = f"http://127.0.0.1:{BRIDGE_PORT}/api"
 LOG_FILE = ROOT / "logs" / "whatsapp-bridge.log"
 MOTES_FILE = lambda: Path(settings["data_dir"]) / "motes.yaml"
-PREFS_FILE = lambda: Path(settings["data_dir"]) / "whatsapp.yaml"   # qué chats avisan
-# estados («status@broadcast») y canales no son chats: ni en la lista ni avisos
+PREFS_FILE = lambda: Path(settings["data_dir"]) / "whatsapp.yaml"   # which chats notify
+# statuses ("status@broadcast") and channels are not chats: neither listed nor announced
 REAL_CHAT = "chat_jid NOT LIKE '%@broadcast' AND chat_jid NOT LIKE '%@newsletter'"
-FRESH = 15 * 60   # lo más viejo que se avisa (lo que llega al sincronizar el historial no se anuncia)
+FRESH = 15 * 60   # oldest message that is announced (what arrives while syncing history is not announced)
 
 
-MEDIA = {"sticker": "Sticker", "image": "📷 Foto", "video": "🎥 Vídeo", "audio": "🎤 Audio", "document": "📄 Documento"}
+MEDIA = {"sticker": "Sticker", "image": "📷 Photo", "video": "🎥 Video", "audio": "🎤 Audio", "document": "📄 Document"}
 
 
 def _media(kind: str | None) -> str:
-    return MEDIA.get(kind or "", "Adjunto") if kind else ""
+    return MEDIA.get(kind or "", "Attachment") if kind else ""
 
 
 def _ts(value) -> float:
-    """«2026-10-27 18:30:00.123456789+01:00» → epoch (Python solo admite 6 decimales)."""
+    """'2026-10-27 18:30:00.123456789+01:00' -> epoch (Python only accepts 6 decimals)."""
     if not value:
         return 0.0
     s = str(value).replace("T", " ")
@@ -63,25 +63,25 @@ class WhatsApp:
         self.state = "off"           # off · starting · qr · connected · error
         self._stop = False
         self._started = False
-        self._last_rowid: int | None = None   # None = primera lectura: lo que ya hay no se anuncia
+        self._last_rowid: int | None = None   # None = first read: what is already there is not announced
         self.chats: list[dict] = []
         self._contact_names: dict[str, str] = {}
         self._contacts_at = 0.0
         self._lid_pn: dict[str, str] = {}
-        # shortcut: el puente no guarda lo que envía, así que se ve hasta reiniciar; guardarlo si se echa en falta
+        # shortcut: the bridge does not store what it sends, so it is visible only until restart; persist it if missed
         self._sent: dict[str, list[dict]] = {}
 
-    # ---------- puente ----------
-    # El puente va por libre: si Cortex se reinicia, sigue conectado y Cortex se engancha a él al volver
-    # (antes se reconectaba en cada reinicio y durante ese rato no llegaba nada).
+    # ---------- bridge ----------
+    # The bridge runs on its own: if Cortex restarts, it stays connected and Cortex re-attaches to it on return
+    # (it used to reconnect on every restart and nothing arrived in the meantime).
     def start(self, link: bool = False):
-        """Al arrancar solo se lanza si ya está vinculado; `link` = lo pide el usuario para vincularlo con el QR."""
+        """At startup it only launches if already linked; `link` = the user asks to link it with the QR."""
         if self.available and not self._started and (link or (STORE / "whatsapp.db").exists()):
             self._started = True
             threading.Thread(target=self._supervise, name="whatsapp-bridge", daemon=True).start()
 
     def stop(self):
-        self._stop = True   # el puente se queda funcionando
+        self._stop = True   # the bridge keeps running
 
     def _bridge(self) -> psutil.Process | None:
         for p in psutil.process_iter(["name", "exe"]):
@@ -100,16 +100,16 @@ class WhatsApp:
         elif "Starting WhatsApp client" in line:
             self.state = "starting"
         elif self.state != "qr" and ("] ← " in line or "] → " in line or "Using existing chat name" in line):
-            # le llegan mensajes: está conectado (al engancharse a un puente de hace días, la línea de
-            # «Connected» ya no está entre las últimas y se quedaba en «sin conexión»)
+            # messages are arriving: it is connected (when attaching to a bridge started days ago, the
+            # "Connected" line is no longer among the last ones and it stayed "disconnected")
             self.state = "connected"
 
     def _supervise(self):
         STORE.mkdir(parents=True, exist_ok=True)
         proc = self._bridge()
         if proc:
-            log.info("Puente de WhatsApp ya en marcha (pid %s): me engancho", proc.pid)
-            try:   # su estado, por lo último que dejó escrito
+            log.info("WhatsApp bridge already running (pid %s): attaching to it", proc.pid)
+            try:   # its state, from what it last wrote
                 for line in LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()[-300:]:
                     self._read_state(line)
             except OSError:
@@ -118,12 +118,12 @@ class WhatsApp:
         while not self._stop:
             if proc is None or not proc.is_running() or proc.status() == psutil.STATUS_ZOMBIE:
                 if proc is not None:
-                    log.warning("El puente de WhatsApp se cerró; lo relanzo en 20 s")
+                    log.warning("The WhatsApp bridge closed; relaunching in 20 s")
                     self.state = "error"
                     time.sleep(20)
                 self.state = "starting"
                 (STORE / "qr.txt").unlink(missing_ok=True)
-                if LOG_FILE.exists() and LOG_FILE.stat().st_size > 10_000_000:   # el historial lo llena rápido
+                if LOG_FILE.exists() and LOG_FILE.stat().st_size > 10_000_000:   # the history fills it quickly
                     LOG_FILE.replace(LOG_FILE.with_suffix(".log.1"))
                 pos = LOG_FILE.stat().st_size if LOG_FILE.exists() else 0
                 try:
@@ -134,12 +134,12 @@ class WhatsApp:
                                                  | subprocess.CREATE_NEW_PROCESS_GROUP)
                     proc = psutil.Process(popen.pid)
                 except (OSError, psutil.Error) as e:
-                    log.warning("No pude arrancar el puente de WhatsApp: %s", e)
+                    log.warning("Could not start the WhatsApp bridge: %s", e)
                     self.state = "error"
                     self._started = False
                     return
-                log.info("Puente de WhatsApp arrancado")
-            try:   # lo nuevo del registro del puente dice en qué estado está
+                log.info("WhatsApp bridge started")
+            try:   # new lines in the bridge log tell its state
                 with open(LOG_FILE, encoding="utf-8", errors="replace") as f:
                     f.seek(pos)
                     for line in f:
@@ -158,9 +158,9 @@ class WhatsApp:
             pass
         return None
 
-    # ---------- nombres y motes ----------
+    # ---------- names and nicknames ----------
     def _contacts(self) -> dict[str, str]:
-        """Número o LID (sin @…) → nombre de la agenda. Se rehace cada 5 minutos."""
+        """Number or LID (without @...) -> address-book name. Rebuilt every 5 minutes."""
         if time.monotonic() - self._contacts_at < 300 and self._contact_names:
             return self._contact_names
         names: dict[str, str] = {}
@@ -180,13 +180,13 @@ class WhatsApp:
                     elif pn not in names and lid in names:
                         names[pn] = names[lid]
             except sqlite3.Error as e:
-                log.warning("WhatsApp: no pude leer la agenda: %s", e)
+                log.warning("WhatsApp: could not read the address book: %s", e)
             finally:
                 con.close()
         self._contact_names, self._contacts_at = names, time.monotonic()
         return names
 
-    # ---------- silenciar ----------
+    # ---------- mute ----------
     def prefs(self) -> dict:
         try:
             data = yaml.safe_load(PREFS_FILE().read_text(encoding="utf-8")) or {}
@@ -195,7 +195,7 @@ class WhatsApp:
         return {"silenciados": dict(data.get("silenciados") or {}), "avisan": dict(data.get("avisan") or {})}
 
     def muted(self, jid: str, prefs: dict | None = None) -> bool:
-        """Los grupos callan salvo que estén en «avisan»; los chats individuales avisan salvo en «silenciados»."""
+        """Groups stay quiet unless listed in "avisan"; individual chats notify unless listed in "silenciados"."""
         p = prefs or self.prefs()
         return jid not in p["avisan"] if jid.endswith("@g.us") else jid in p["silenciados"]
 
@@ -207,8 +207,8 @@ class WhatsApp:
             p["avisan"][jid] = name
         elif not jid.endswith("@g.us") and muted:
             p["silenciados"][jid] = name
-        text = ("# WhatsApp: qué chats avisan. Los grupos están callados salvo los de «avisan»;\n"
-                "# los chats individuales avisan salvo los de «silenciados». (identificador: nombre)\n")
+        text = ("# WhatsApp: which chats notify. Groups are quiet unless listed under 'avisan';\n"
+                "# individual chats notify unless listed under 'silenciados'. (identifier: name)\n")
         text += yaml.safe_dump(p, allow_unicode=True, sort_keys=True, default_flow_style=False)
         PREFS_FILE().write_text(text, encoding="utf-8")
         for c in self.chats:
@@ -216,7 +216,7 @@ class WhatsApp:
                 c["muted"] = muted
 
     def motes(self) -> dict[str, str]:
-        """Nombre de WhatsApp → cómo lo dice Cortex (motes.yaml, en la carpeta de datos)."""
+        """WhatsApp name -> how Cortex says it (motes.yaml, in the data folder)."""
         try:
             data = yaml.safe_load(MOTES_FILE().read_text(encoding="utf-8")) or {}
             return {str(k): str(v) for k, v in data.items() if v}
@@ -229,7 +229,7 @@ class WhatsApp:
             motes[name] = mote.strip()
         else:
             motes.pop(name, None)
-        text = "# Motes de WhatsApp: cómo dice Cortex a cada contacto («Nombre en WhatsApp: mote»).\n"
+        text = "# WhatsApp nicknames: how Cortex calls each contact ('Name in WhatsApp: nickname').\n"
         text += yaml.safe_dump(motes, allow_unicode=True, sort_keys=True, default_flow_style=False) if motes else ""
         MOTES_FILE().write_text(text, encoding="utf-8")
 
@@ -242,17 +242,17 @@ class WhatsApp:
             if not jid.endswith("@g.us") and "@" not in jid:
                 jid = f"{jid}@s.whatsapp.net"
             name = chat_names.get(jid)
-            if not name or name.lstrip("+").isdigit():   # sin nombre o con el número/ID interno de WhatsApp
-                pn = self._lid_pn.get(user, "" if jid.endswith("@lid") else user)   # un LID sin @ (remitente de grupo) también
-                name = contacts.get(user) or contacts.get(pn) or ("+" + pn if pn else "Alguien")
+            if not name or name.lstrip("+").isdigit():   # no name, or the number/internal ID from WhatsApp
+                pn = self._lid_pn.get(user, "" if jid.endswith("@lid") else user)   # a LID without @ (group sender) too
+                name = contacts.get(user) or contacts.get(pn) or ("+" + pn if pn else "Someone")
             return name
 
-        def show(jid: str) -> tuple[str, str]:   # (como se dice, nombre real)
+        def show(jid: str) -> tuple[str, str]:   # (as spoken, real name)
             name = real(jid)
             return motes.get(name, name), name
         return show
 
-    # ---------- leer ----------
+    # ---------- read ----------
     def _db(self) -> sqlite3.Connection | None:
         path = STORE / "messages.db"
         if not path.exists():
@@ -262,7 +262,7 @@ class WhatsApp:
         return con
 
     def check(self) -> list[dict]:
-        """Refresca los chats recientes y devuelve los mensajes recibidos nuevos desde la última vez."""
+        """Refresh the recent chats and return the received messages that are new since the last call."""
         con = self._db()
         if con is None:
             return []
@@ -286,7 +286,7 @@ class WhatsApp:
                 self._last_rowid = top
                 return []
             new, now = [], time.time()
-            # un mensaje que entre entre las dos consultas sale aquí: se apunta su rowid para no repetirlo luego
+            # a message arriving between the two queries shows up here: its rowid is noted so it is not repeated later
             for m in con.execute(f"""SELECT rowid, id, chat_jid, sender, content, media_type, timestamp FROM messages
                                     WHERE rowid > ? AND is_from_me = 0 AND {REAL_CHAT} ORDER BY rowid""", (self._last_rowid,)):
                 top = max(top, m["rowid"])
@@ -299,13 +299,13 @@ class WhatsApp:
             self._last_rowid = top
             return new
         except sqlite3.Error as e:
-            log.warning("WhatsApp: no pude leer los mensajes: %s", e)
+            log.warning("WhatsApp: could not read the messages: %s", e)
             return []
         finally:
             con.close()
 
     def messages(self, jid: str, limit: int = 60) -> dict:
-        """Los últimos mensajes de un chat, del más viejo al más nuevo."""
+        """The latest messages of a chat, oldest to newest."""
         con = self._db()
         if con is None:
             return {"jid": jid, "messages": []}
@@ -324,19 +324,19 @@ class WhatsApp:
             con.close()
 
     def media_file(self, jid: str, msg_id: str) -> Path:
-        """Descarga (el puente la guarda en store/<chat>/) una nota de voz, foto… y devuelve dónde está. Solo
-        leer: es lo mismo que hace WhatsApp al abrir el mensaje."""
+        """Download (the bridge saves it in store/<chat>/) a voice note, photo... and return where it is. Read
+        only: it is the same thing WhatsApp does when opening the message."""
         r = httpx.post(f"{BRIDGE_API}/download", json={"message_id": msg_id, "chat_jid": jid}, timeout=60)
         data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
         if not data.get("success"):
-            raise RuntimeError(data.get("message") or f"el puente dijo {r.status_code}")
+            raise RuntimeError(data.get("message") or f"the bridge said {r.status_code}")
         path = Path(data["path"]).resolve()
-        if STORE.resolve() not in path.parents:   # solo ficheros de su carpeta
-            raise RuntimeError("ruta inesperada")
+        if STORE.resolve() not in path.parents:   # only files inside its folder
+            raise RuntimeError("unexpected path")
         return path
 
     def _owns_port(self) -> bool:
-        """¿Escucha en el puerto el puente de Cortex? Puede haber otro, vinculado a otra cuenta."""
+        """Is the Cortex bridge listening on the port? There may be another, linked to a different account."""
         proc = self._bridge()
         try:
             return bool(proc) and any(c.laddr and c.laddr.port == BRIDGE_PORT and c.status == psutil.CONN_LISTEN
@@ -345,25 +345,25 @@ class WhatsApp:
             return False
 
     def send(self, jid: str, text: str) -> str:
-        """Envía un texto a un chat de la lista. Devuelve el error, o "" si salió."""
+        """Send a text to a chat in the list. Returns the error, or "" if it went out."""
         text = text.strip()
         if settings["whatsapp_mode"] != "write":
-            return "WhatsApp está en solo lectura (Ajustes → Cerebro)."
+            return "WhatsApp is read-only (Settings -> Brain)."
         if not any(c["jid"] == jid for c in self.chats):
-            return "Ese chat no está en la lista."
+            return "That chat is not in the list."
         if not 1 <= len(text) <= 4000:
-            return "El mensaje tiene que tener entre 1 y 4000 letras."
+            return "The message must be between 1 and 4000 characters."
         if self.state != "connected" or not self._owns_port():
-            return "WhatsApp no está conectado."
+            return "WhatsApp is not connected."
         try:
             r = httpx.post(f"{BRIDGE_API}/send", json={"recipient": jid, "message": text}, timeout=30)
             ok = r.json().get("success") is True
         except httpx.TimeoutException:
-            return "WhatsApp no ha contestado a tiempo: mira en el móvil si ha salido antes de repetirlo."
+            return "WhatsApp did not answer in time: check on your phone whether it went out before repeating it."
         except (httpx.HTTPError, ValueError, AttributeError):
             ok = False
         if not ok:
-            return "No se ha podido enviar."
+            return "Could not send."
         now = time.time()
         self._sent.setdefault(jid, []).append({"id": f"sent-{now}", "media": "", "caption": "", "from": "", "mine": True,
                                                "text": text, "time": now})

@@ -1,4 +1,4 @@
-"""Cortex Sense y su enlace con Hub, sin webcam: comandos, calibración, cámara compartida, protocolo."""
+"""Cortex Sense and its link to Hub, without a webcam: commands, calibration, shared camera, protocol."""
 
 import threading
 
@@ -10,7 +10,7 @@ from sense.camera import SharedCamera
 from sense.config import DEFAULTS
 
 
-# ── comandos ──
+# ── commands ──
 def test_parse_keys():
     assert commands.parse_keys("ctrl+shift+m") == [0x11, 0x10, ord("M")]
     assert commands.parse_keys("Win + D") == [0x5B, ord("D")]
@@ -36,7 +36,7 @@ def test_route_sends_hub_actions_to_hub_or_falls_back_to_media_keys():
     assert commands.route("next", hub_connected=True) == "hub"
     assert commands.route("next", hub_connected=False) == "media:next"
     assert commands.route("toggle", hub_connected=False) == "media:play_pause"
-    assert commands.route("listen", hub_connected=False) is None   # sin Hub no hay asistente que escuche
+    assert commands.route("listen", hub_connected=False) is None   # without Hub there is no assistant to listen
     assert commands.route("keys:ctrl+c", hub_connected=True) == "keys:ctrl+c"
     assert commands.route("none", hub_connected=True) is None
 
@@ -46,7 +46,7 @@ def test_run_refuses_invalid_and_hub_actions():
     assert commands.run("media:jump") is False
 
 
-# ── calibración ──
+# ── calibration ──
 def _samples(pitch=8.0, size=0.12, pinch_px=(20, 200)):
     look = [{"pitch": pitch + (i % 3 - 1), "brightness": 90, "cam_fps": 30} for i in range(30)]
     hand = [{"hand": True, "hand_size": size, "side": "Right"} for _ in range(30)]
@@ -58,7 +58,7 @@ def _samples(pitch=8.0, size=0.12, pinch_px=(20, 200)):
 def test_calibration_adapts_to_the_user():
     changes, report = calibration.suggest(_samples(), (1920, 1080), DEFAULTS)
     assert changes["look_pitch_offset"] == 8
-    assert changes["swipe_min_distance"] < DEFAULTS["swipe_min_distance"]   # mano pequeña (lejos) → menos recorrido
+    assert changes["swipe_min_distance"] < DEFAULTS["swipe_min_distance"]   # small hand (far away) → shorter travel
     assert changes["pinch_grab"] < changes["pinch_release"]
     assert 20 < changes["pinch_grab"] < 200
     assert report["side"] == "Right" and report["notes"] == []
@@ -75,10 +75,10 @@ def test_calibration_warns_about_dark_rooms():
     for x in s["look"]:
         x["brightness"] = 20
     _, report = calibration.suggest(s, (1920, 1080), DEFAULTS)
-    assert any("luz" in n for n in report["notes"])
+    assert any("light" in n.lower() for n in report["notes"])
 
 
-# ── cámara compartida ──
+# ── shared camera ──
 class FakeCap:
     def __init__(self):
         self.n, self.released = 0, False
@@ -96,7 +96,7 @@ def test_shared_camera_feeds_two_readers_and_releases_with_the_last():
     caps = []
     cam = SharedCamera(0, opener=lambda i: caps.append(FakeCap()) or caps[-1])
     a, b = cam.reader(), cam.reader()
-    assert len(caps) == 1   # se abre una sola vez
+    assert len(caps) == 1   # opened only once
     ok_a, fa = a.read()
     ok_b, fb = b.read()
     assert ok_a and ok_b and fa is not None and fb is not None
@@ -110,10 +110,10 @@ def test_shared_camera_reports_a_missing_camera():
     assert SharedCamera(3, opener=lambda i: None).reader() is None
 
 
-# ── servidor: solo el panel local puede cambiar cosas ──
+# ── server: only the local panel may change things ──
 def test_only_local_panels_may_change_settings():
     from sense.app import origin_ok
-    assert origin_ok(None)   # Hub y programas locales no mandan Origin
+    assert origin_ok(None)   # Hub and local programs send no Origin
     assert origin_ok("http://127.0.0.1:8766") and origin_ok("http://localhost:8765")
     assert not origin_ok("https://evil.example") and not origin_ok("http://127.0.0.1:9999")
 
@@ -139,7 +139,7 @@ def test_hub_settings_read_gesture_keys_from_sense():
     s = config.Settings()
     link = SenseLink("http://127.0.0.1:8766")
     s.sense = link
-    assert s["gesture_actions"] == {}   # Sense apagado: lo de Hub
+    assert s["gesture_actions"] == {}   # Sense off: Hub's settings only
     link.connected, link.settings = True, {"gesture_actions": {"ok": "listen"}, "gestures_enabled": True}
     assert s["gesture_actions"] == {"ok": "listen"} and s.all()["gestures_enabled"] is True
 
@@ -147,12 +147,12 @@ def test_hub_settings_read_gesture_keys_from_sense():
 def test_sense_api_validates_mappings_and_blocks_other_sites(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
     from sense import app as sense_app
-    monkeypatch.setattr(sense_app.settings, "path", tmp_path / "sense.yaml")   # no tocar el sense.yaml de verdad
-    c = TestClient(sense_app.app)   # sin `with`: no arranca la cámara
+    monkeypatch.setattr(sense_app.settings, "path", tmp_path / "sense.yaml")   # do not touch the real sense.yaml
+    c = TestClient(sense_app.app)   # no `with`: does not start the camera
     assert "error" in c.post("/api/settings", json={"gesture_actions": {"ok": "run:"}}).json()
     r = c.post("/api/settings", json={"gesture_actions": {"ok": "keys:ctrl+shift+m"}}).json()
     assert r["settings"]["gesture_actions"]["ok"] == "keys:ctrl+shift+m"
-    assert r["settings"]["gesture_actions"]["swipe_left"] == "next"   # el resto se conserva
+    assert r["settings"]["gesture_actions"]["swipe_left"] == "next"   # the rest is preserved
     assert c.post("/api/settings", json={"gesture_actions": {"ok": "run:calc"}},
                   headers={"Origin": "https://evil.example"}).status_code == 403
     assert set(c.get("/api/catalog").json()["gestures"]) >= {"swipe_left", "both_palms"}

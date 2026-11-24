@@ -1,9 +1,9 @@
-"""Recetas por servicio de vídeo: de «último telediario» a la URL que se reproduce, y cómo darle al play.
+"""Per-service video recipes: from "latest news broadcast" to the URL that plays, and how to press play.
 
-find(servicio, búsqueda) usa la propia API pública de cada web (sin claves): RTVE (api.rtve.es), Pluto TV
-(boot + canales + búsqueda), Atresplayer (api.atresplayer.com) y YouTube (la búsqueda de youtube.py).
-Netflix, Prime Video y Disney+ piden sesión: solo se abre su página de búsqueda.
-steps(url) dice qué pulsar en cada web para que arranque (los avisos de cookies, siempre «rechazar»).
+find(service, query) uses each site's own public API (no keys): RTVE (api.rtve.es), Pluto TV
+(boot + channels + search), Atresplayer (api.atresplayer.com) and YouTube (youtube.py's search).
+Netflix, Prime Video and Disney+ need a login: only their search page is opened.
+steps(url) says what to press on each site to start playback (cookie notices: always "reject").
 """
 
 import logging
@@ -22,7 +22,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
       "Chrome/130.0 Safari/537.36 Edg/130.0")
 H = {"User-Agent": UA, "Accept-Language": "es-ES,es;q=0.9"}
 
-# palabras que no ayudan a buscar
+# words that do not help the search (Spanish filler words in voice requests; kept)
 STOP = set("el la los las lo un una unos unas de del en y a al con por para que mi me pon ponme ver quiero echa "
            "reproduce ultimo ultima ultimos ultimas reciente nuevo nueva capitulo episodio programa completo entero "
            "hoy ayer anoche esta noche manana tarde rtve play pluto tv atresplayer canal directo vivo".split())
@@ -51,7 +51,7 @@ def wanted_day(query: str) -> date | None:
 
 
 def _pick_day(items: list[dict], day: date | None) -> list[dict]:
-    """Si se pidió «anoche»/«hoy», primero lo de ese día (si hay)."""
+    """If "anoche"/"hoy" (last night/today) was asked for, put that day's items first (if any)."""
     if not day:
         return items
     hit = [i for i in items if i.get("date") == day.isoformat()]
@@ -67,8 +67,8 @@ def _get(url: str, **kw):
 # ---------- RTVE Play ----------
 RTVE_LIVE = {"la 1": "la-1", "la1": "la-1", "la 2": "la-2", "la2": "la-2", "24 horas": "24h", "24h": "24h",
              "canal 24": "24h", "teledeporte": "tdp", "clan": "clan"}
-RTVE_NEWS = [45030, 135930, 135932, 135931]   # Telediario 1, 2, fin de semana y matinal
-RTVE_COMPLETO = 39816                           # tipo de vídeo «Completo» (no fragmentos)
+RTVE_NEWS = [45030, 135930, 135932, 135931]   # Telediario 1, 2, weekend and morning edition
+RTVE_COMPLETO = 39816                           # video type "Completo" (full episodes, not clips)
 
 
 def _rtve_date(s: str | None) -> str | None:
@@ -83,7 +83,7 @@ def _rtve_latest(pid: int, n: int = 3) -> list[dict]:
                  params={"type": RTVE_COMPLETO, "size": n})["page"]["items"]
     return [{"title": v.get("title", ""), "url": v["htmlUrl"], "kind": "capítulo", "date": _rtve_date(v.get("publicationDate")),
              "sort": v.get("publicationDate") and datetime.strptime(v["publicationDate"], "%d-%m-%Y %H:%M:%S").timestamp()}
-            for v in items if v.get("htmlUrl") and (v.get("duration") or 0) > 600_000]   # fuera los resúmenes de 4 min
+            for v in items if v.get("htmlUrl") and (v.get("duration") or 0) > 600_000]   # drop the 4-minute summaries
 
 
 RTVE_HOURS = {"3": "15 horas", "15": "15 horas", "tres": "15 horas", "mediodia": "15 horas", "1": "15 horas",
@@ -92,13 +92,13 @@ RTVE_HOURS = {"3": "15 horas", "15": "15 horas", "tres": "15 horas", "mediodia":
 
 
 def _rtve_news(ws: list[str], query: str) -> list[dict]:
-    """Telediarios: el más reciente de todas las ediciones (o la que se pida: «de las 3», «de la noche»…)."""
+    """News broadcasts: the most recent of all editions (or the one asked for: \"de las 3\", \"de la noche\"...)."""
     out = []
     for pid in RTVE_NEWS:
         try:
             out += _rtve_latest(pid, 4)
         except (httpx.HTTPError, KeyError, ValueError) as e:
-            log.info("RTVE programa %s: %s", pid, e)
+            log.info("RTVE program %s: %s", pid, e)
     hint = next((RTVE_HOURS[w] for w in ws if w in RTVE_HOURS), None)
     if hint == "matinal":
         out = [v for v in out if "telediario-matinal" in v["url"]] or out
@@ -114,7 +114,7 @@ def rtve(query: str) -> list[dict]:
     q, ws = norm(query), words(query)
     for name, slug in RTVE_LIVE.items():
         if re.search(rf"\b{name}\b", q) and (wants_live(query) or " ".join(ws) in (name, name.replace(" ", ""))):
-            return [{"title": f"{name.upper()} en directo", "url": f"https://www.rtve.es/play/videos/directo/canales-lineales/{slug}/",
+            return [{"title": f"{name.upper()} live", "url": f"https://www.rtve.es/play/videos/directo/canales-lineales/{slug}/",
                      "kind": "directo", "date": None}]
     if not ws:
         return []
@@ -133,9 +133,9 @@ def rtve(query: str) -> list[dict]:
             out += [{**v, "rank": rank} for v in _rtve_latest(pid)]
         except (httpx.HTTPError, KeyError, ValueError) as e:
             log.info("RTVE programa %s: %s", pid, e)
-    # lo más reciente primero; el mismo día, el programa que mejor encaja
+    # most recent first; on the same day, the best-matching program
     out.sort(key=lambda v: (-(int((v.get("sort") or 0) // 86400)), v["rank"], -(v.get("sort") or 0)))
-    if not out:   # sin programa: vídeos sueltos (completos primero)
+    if not out:   # no program: individual videos (full ones first)
         items = _get("https://api.rtve.es/api/search/contents", params={"search": " ".join(ws), "size": 10})["page"]["items"]
         items.sort(key=lambda v: (v.get("type") or {}).get("name") != "Completo")
         out = [{"title": v.get("title", ""), "url": v["htmlUrl"], "kind": "vídeo", "date": _rtve_date(v.get("publicationDate"))}
@@ -204,7 +204,7 @@ def pluto(query: str) -> list[dict]:
                 s = _get(f"https://service-vod.clusters.pluto.tv/v4/vod/series/{it['id']}/seasons",
                          params={"offset": 1000, "page": 1}, headers=auth)
                 eps = [e for season in s.get("seasons", []) for e in season.get("episodes", [])]
-                if eps:   # la serie desde el primer capítulo
+                if eps:   # the series from the first episode
                     e = eps[0]
                     vod.append({"title": it["name"], "kind": "serie", "date": None,
                                 "url": f"https://pluto.tv/es/on-demand/series/{it['slug']}/season/{e.get('season', 1)}"
@@ -215,8 +215,8 @@ def pluto(query: str) -> list[dict]:
             if len(vod) >= 5:
                 break
     except (httpx.HTTPError, KeyError, ValueError) as e:
-        log.info("Pluto búsqueda: %s", e)
-    # lo que más se parece al nombre primero
+        log.info("Pluto search: %s", e)
+    # the closest match to the name first
     vod.sort(key=lambda v: not all(w in norm(v["title"]) for w in words(query)))
     return vod + live
 
@@ -242,11 +242,11 @@ def atresplayer(query: str) -> list[dict]:
     q, ws = norm(query), words(query)
     for name, slug in ATRES_LIVE.items():
         if re.search(rf"\b{name}\b", q) and (wants_live(query) or " ".join(ws) in (name, name.replace(" ", ""))):
-            return [{"title": f"{name.title()} en directo", "url": f"https://www.atresplayer.com/directos/{slug}/",
+            return [{"title": f"{name.title()} live", "url": f"https://www.atresplayer.com/directos/{slug}/",
                      "kind": "directo", "date": None}]
     if not ws:
         return []
-    if "noticias" in ws:   # informativos: las dos ediciones del canal, lo último primero
+    if "noticias" in ws:   # news: the channel's two editions, latest first
         chan = "lasexta" if re.search(r"sexta", q) else "antena3"
         out = []
         for i, fid in enumerate(ATRES_NEWS[chan]):
@@ -266,7 +266,7 @@ def atresplayer(query: str) -> list[dict]:
     if not out:
         out = [_atres_item(it) for it in _get(ATRES_API, params={"entityType": "ATPEpisode", "text": text, "size": 8})
                .get("itemRows", [])]
-    out.sort(key=lambda v: not v.pop("free"))   # lo de pago (Premium) al final
+    out.sort(key=lambda v: not v.pop("free"))   # paid (Premium) items last
     return _pick_day(out, wanted_day(query))
 
 
@@ -277,11 +277,11 @@ def youtube_find(query: str) -> list[dict]:
              "id": v["id"]} for v in youtube.search(query, limit=5)]
 
 
-# ---------- con sesión: solo la búsqueda ----------
+# ---------- with login: search only ----------
 SEARCH_URL = {
-    "netflix": "https://www.netflix.com/search?q={}",                       # título: /title/ID · ver: /watch/ID
-    "prime": "https://www.primevideo.com/search/ref=atv_nb_sug?phrase={}",  # título: /detail/ID
-    "disney": "https://www.disneyplus.com/browse/search?q={}",              # título: /browse/entity-ID · ver: /play/ID
+    "netflix": "https://www.netflix.com/search?q={}",                       # title: /title/ID, watch: /watch/ID
+    "prime": "https://www.primevideo.com/search/ref=atv_nb_sug?phrase={}",  # title: /detail/ID
+    "disney": "https://www.disneyplus.com/browse/search?q={}",              # title: /browse/entity-ID, watch: /play/ID
 }
 
 FINDERS = {"rtve": rtve, "pluto": pluto, "atresplayer": atresplayer, "youtube": youtube_find}
@@ -299,14 +299,14 @@ VIDEO_PATH = re.compile(r"/(video|watch|ver|v|pelicula|movie|serie|episodio|epis
                         r"(/|$|-)|/\d{5,}|[?&]v=", re.I)
 
 
-# los buscadores, abiertos en la ventana de vídeos (un navegador de verdad: pedidos desde Python devuelven
-# basura o cortan); {q} = «site:dominio búsqueda»
+# the search engines, opened in the videos window (a real browser: requests from Python return
+# junk or get blocked); {q} = "site:domain query"
 ENGINES = ["https://www.bing.com/search?q={q}&setlang=es", "https://html.duckduckgo.com/html/?q={q}"]
 ENGINE_LINKS_JS = r"""[...document.querySelectorAll('a.result__a, li.b_algo h2 a')].map(a => a.href)"""
 
 
 def engine_url(href: str) -> str:
-    """La dirección de verdad detrás de un enlace de resultado (DuckDuckGo: uddg=…; Bing: u=a1<base64>)."""
+    """The real address behind a result link (DuckDuckGo: uddg=...; Bing: u=a1<base64>)."""
     import base64
     from urllib.parse import unquote
     m = re.search(r"[?&]uddg=([^&]+)", href)
@@ -322,32 +322,32 @@ def engine_url(href: str) -> str:
 
 
 def pick_engine_result(hrefs: list[str], domain: str) -> str | None:
-    """La primera que parece un vídeo de esa web; si ninguna, la primera de esa web."""
+    """The first that looks like a video on that site; if none, the first on that site."""
     urls = [u for u in (engine_url(h) for h in hrefs or []) if u.startswith("http") and domain in u.split("/")[2]]
     return next((u for u in urls if VIDEO_PATH.search(u)), urls[0] if urls else None)
 
 
 def find(service: str, query: str) -> list[dict]:
-    """[{title, url, kind, date}] (lo mejor primero). Vacía si no hay nada; RuntimeError si la web falla."""
+    """[{title, url, kind, date}] (best first). Empty if nothing is found; RuntimeError if the site fails."""
     key = service_key(service)
     if key in SEARCH_URL:
-        return [{"title": f"Buscar «{query}»", "url": SEARCH_URL[key].format(quote_plus(query)), "kind": "búsqueda",
+        return [{"title": f"Search \"{query}\"", "url": SEARCH_URL[key].format(quote_plus(query)), "kind": "búsqueda",
                  "date": None}]
     if key not in FINDERS:
         return []
     try:
         return FINDERS[key](query)
     except (httpx.HTTPError, KeyError, ValueError) as e:
-        log.warning("Buscar %r en %s: %s", query, key, e)
-        raise RuntimeError(f"No pude buscar en {service}") from e
+        log.warning("Search %r on %s: %s", query, key, e)
+        raise RuntimeError(f"Could not search {service}") from e
 
 
-# ---------- arrancar la reproducción ----------
-# avisos de cookies: siempre la opción que rechaza / solo necesarias
+# ---------- start playback ----------
+# cookie notices: always the option that rejects / only necessary
 REJECT = ["#onetrust-reject-all-handler", "#didomi-notice-disagree-button", "#ketch-banner-button-secondary",
           "button[aria-label^='Rechazar']", "#CybotCookiebotDialogBodyButtonDecline"]
 REJECT_TEXT = r"^(rechazar( todo| todas( las cookies)?)?|solo (las )?(esenciales|necesarias)|continuar sin aceptar|reject all)$"
-# por web: [selector, texto exacto (regex) o None]; se pulsa el primero visible
+# per site: [selector, exact text (regex) or None]; the first visible one is pressed
 STEPS = {
     "rtve.es": [[".custom-big", None], [".vjs-big-play-button", None]],
     "atresplayer.com": [["[class*=StyledPlayButton]", "reproducir"], ["button", "^directo$"]],
@@ -364,7 +364,7 @@ def steps(host: str) -> list:
 
 
 def click_js(selectors: list) -> str:
-    """JS que pulsa el primer elemento visible de la lista (con su texto, si se da). Devuelve qué pulsó o null."""
+    """JS that presses the first visible element in the list (matching its text, if given). Returns what it pressed, or null."""
     import json
     return """((sel) => {
   for (const [s, t] of sel) {
@@ -377,7 +377,7 @@ def click_js(selectors: list) -> str:
 
 REJECT_JS = click_js([[s, None] for s in REJECT] + [["button, [role=button]", REJECT_TEXT]])
 
-# la web pide cuenta (RTVE: lo de La 1 en directo y lo que lleva DRM; Netflix/Prime/Disney+ sin sesión)
+# the site asks for an account (RTVE: La 1 live and DRM content; Netflix/Prime/Disney+ without a session)
 WALL_JS = r"""(() => {
   const t = document.body ? document.body.innerText.slice(0, 20000) : '';
   const m = t.match(/exclusivo para usuarios registrados|inicia sesi[oó]n para (ver|seguir|continuar)|reg[ií]strate (gratis )?para (ver|seguir)|ya tengo una cuenta|sign in to watch/i);
@@ -386,7 +386,7 @@ WALL_JS = r"""(() => {
 
 
 def generic_ok(host: str) -> bool:
-    """El botón «play» genérico solo en webs sin receta probada (en estas pulsaba avisos y marcos)."""
-    # en Netflix pulsaba «Regresar a Explorar» (su botón de volver tiene «play» en la clase) y te sacaba del vídeo
+    """The generic \"play\" button only on sites without a proven recipe (on these it pressed notices and frames)."""
+    # on Netflix it pressed "Regresar a Explorar" (its back button has "play" in its class) and took you out of the video
     return not any(host == d or host.endswith("." + d)
                    for d in ("rtve.es", "pluto.tv", "atresplayer.com", "netflix.com", "primevideo.com", "disneyplus.com"))

@@ -1,4 +1,4 @@
-"""Buscador del panel: resultados de DuckDuckGo (gratis, sin clave). Caché de 10 min por búsqueda."""
+"""Dashboard search: DuckDuckGo results (free, no key). 10-minute cache per query."""
 
 import html
 import logging
@@ -22,7 +22,7 @@ def _text(fragment: str) -> str:
 
 
 def _real_url(href: str) -> str:
-    """DuckDuckGo a veces envuelve el enlace en una redirección (/l/?uddg=…)."""
+    """DuckDuckGo sometimes wraps the link in a redirect (/l/?uddg=...)."""
     if href.startswith("//"):
         href = "https:" + href
     q = parse_qs(urlparse(href).query)
@@ -30,7 +30,7 @@ def _real_url(href: str) -> str:
 
 
 def search(query: str, limit: int = 8) -> list[dict]:
-    """[{title, url, site, snippet}]. Lanza RuntimeError con un mensaje en español si no se puede."""
+    """[{title, url, site, snippet}]. Raises RuntimeError with a readable message on failure."""
     query = query.strip()
     if not query:
         return []
@@ -41,19 +41,19 @@ def search(query: str, limit: int = 8) -> list[dict]:
         r = httpx.post(URL, data={"q": query, "kl": "es-es"}, headers={"User-Agent": UA}, timeout=10)
         r.raise_for_status()
     except httpx.HTTPError as e:
-        log.warning("Buscador: %s", e)
-        raise RuntimeError("No pude buscar: sin conexión o el buscador no responde") from e
+        log.warning("Search: %s", e)
+        raise RuntimeError("Could not search: no connection or the search engine is not responding") from e
     results = []
     for href, title, snippet in RESULT.findall(r.text):
         url = _real_url(html.unescape(href))
-        if "duckduckgo.com/y.js" in url:   # anuncios
+        if "duckduckgo.com/y.js" in url:   # ads
             continue
         results.append({"title": _text(title), "url": url, "site": urlparse(url).netloc.removeprefix("www."),
                         "snippet": _text(snippet)})
         if len(results) >= limit:
             break
     if not results and "anomaly" in r.text.lower():
-        raise RuntimeError("El buscador ha bloqueado la búsqueda un rato; pregúntaselo a Cortex")
+        raise RuntimeError("The search engine has blocked searches for a while; ask Cortex instead")
     _cache[query.lower()] = (time.time(), results)
     if len(_cache) > 50:
         _cache.pop(next(iter(_cache)))

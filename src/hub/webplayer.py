@@ -1,16 +1,17 @@
-"""Reproductor de webs de vídeo (RTVE Play, YouTube, Netflix, Pluto TV…).
+"""Web video player (RTVE Play, YouTube, Netflix, Pluto TV...).
 
-Cortex abre la página en una ventana de Edge con su propio perfil (las sesiones que Charlie inicie se quedan
-guardadas) y la controla por el protocolo de depuración (CDP): en cualquier página busca el <video> principal
-—también dentro de iframes— y lo maneja igual en todas. La URL la saca video_sites (con la búsqueda de cada web)
-o Claude. Vale cualquier web (salvo un servicio desactivado en Ajustes o una de la lista de bloqueadas); en las
-que no tienen receta, search_site busca en la propia página como haría una persona.
-Para arrancar: rechaza las cookies y pulsa el play de esa web (video_sites.steps) o uno genérico.
+Cortex opens the page in an Edge window with its own profile (sessions the user signs in to are kept) and
+controls it over the Chrome DevTools Protocol (CDP): on any page it finds the main <video> (also inside
+iframes) and drives it the same way everywhere. The URL comes from video_sites (with each site's search) or
+from Claude. Any site works (except a service disabled in Settings or one on the blocked list); for sites
+without a recipe, search_site searches the page itself the way a person would.
+To start playback it rejects cookies and presses that site's play button (video_sites.steps) or a generic one.
 
-Dentro del panel: la ventana pasa a ser hija de la del panel (SetParent), colocada en el recuadro del widget
-Vídeos y recortada (SetWindowRgn) para que solo se vea la página, sin barra de título. Así va con el panel: no
-flota encima de otras aplicaciones, se minimiza y se mueve con él. Es la misma ventana y el mismo perfil, así que
-las sesiones (Netflix…) siguen ahí. Para iniciar sesión se suelta como ventana normal («Ventana» en el widget).
+Inside the panel: the window becomes a child of the panel window (SetParent), placed over the Videos widget's
+box and clipped (SetWindowRgn) so only the page shows, with no title bar. That way it moves with the panel: it
+does not float above other applications, and it minimizes and moves with it. It is the same window and the same
+profile, so sessions (Netflix...) are still there. To sign in, it is released as a normal window ("Window" in
+the widget).
 """
 
 import ctypes
@@ -36,8 +37,8 @@ PROFILE = ROOT / "logs" / "edge-tv"
 EDGE = next((p for p in (Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
                          Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe")) if p.exists()), None)
 
-# redes de anuncios y ventanas emergentes: en el Edge de vídeos no llegan a cargar (como un bloqueador sencillo).
-# Los anuncios metidos dentro del propio vídeo (los de la tele, p. ej.) no se pueden quitar así.
+# ad networks and popups: in the video Edge they never load (like a simple blocker).
+# Ads embedded in the video itself (broadcast TV ads, for example) cannot be removed this way.
 AD_HOSTS = ["doubleclick.net", "googlesyndication.com", "googleadservices.com", "adservice.google.com",
             "imasdk.googleapis.com", "pubads.g.doubleclick.net", "adnxs.com", "taboola.com", "outbrain.com",
             "popads.net", "popcash.net", "propellerads.com", "adsterra.com", "exoclick.com", "juicyads.com",
@@ -46,7 +47,7 @@ AD_HOSTS = ["doubleclick.net", "googlesyndication.com", "googleadservices.com", 
             "smartadserver.com", "rubiconproject.com", "pubmatic.com", "openx.net", "teads.tv", "yieldmo.com"]
 HOST_RULES = ", ".join(f"MAP {h} 0.0.0.0, MAP *.{h} 0.0.0.0" for h in AD_HOSTS)
 
-# el <video> que importa: el más grande de la página (o el que ya tenga contenido)
+# the <video> that matters: the largest one on the page (or the one that already has content)
 FIND = """(() => {
   const vs = [...document.querySelectorAll('video')]
     .map(v => [v, v.offsetWidth * v.offsetHeight + (v.readyState > 0 ? 1 : 0)]).filter(([, a]) => a > 0)
@@ -68,8 +69,8 @@ ACTIONS = {
     "fullscreen": "if (document.fullscreenElement) document.exitFullscreen(); "
                   "else (v.closest('[class*=player i], [id*=player i]') || v).requestFullscreen();",
 }
-# si aún no hay vídeo, se pulsa lo que parezca un botón de reproducir; nunca un enlace a otra página
-# (en RTVE el logo «RTVE Play» es un enlace a la portada: pulsarlo era lo que dejaba la portada parada)
+# if there is no video yet, press whatever looks like a play button; never a link to another page
+# (on RTVE the "RTVE Play" logo links to the home page: pressing it used to leave the home page stuck)
 CLICK_PLAY = """(() => {
   const sel = ['[aria-label*="reproducir" i]', '[aria-label*="play" i]', '[title*="reproducir" i]', '[title*="play" i]',
                '[class*="play-button" i]', '[class*="playbutton" i]', '[data-testid*="play" i]', 'button[class*="play" i]'];
@@ -77,7 +78,7 @@ CLICK_PLAY = """(() => {
   for (const s of sel) {
     const b = [...document.querySelectorAll(s)].find(e => e.offsetWidth > 0 && !nav(e) && !/logo/i.test(e.className) &&
       !/playlist|lista|rtve ?play|pluto ?tv|youtube/i.test(e.textContent + (e.getAttribute('aria-label') || '')) &&
-      !/player/i.test((e.getAttribute('aria-label') || '') + (e.getAttribute('title') || '')));   // «video player»: es el marco, no el botón
+      !/player/i.test((e.getAttribute('aria-label') || '') + (e.getAttribute('title') || '')));   // "video player": that is the frame, not the button
     if (b) { b.click(); return s + ' «' + (b.getAttribute('aria-label') || b.textContent).trim().slice(0, 40) + '»'; }
   }
   return null;
@@ -89,26 +90,26 @@ def _host(url: str) -> str:
 
 
 def check(url: str) -> str | None:
-    """None si se puede abrir; si no, el motivo (en español)."""
+    """None if it can be opened; otherwise the reason."""
     host = _host(url)
     if not host or urlparse(url).scheme not in ("http", "https"):
-        return "Esa dirección no es una web."
+        return "That address is not a website."
     if any(b in host for b in settings["blocked_sites"]):
-        return "Esa web está en tu lista de bloqueadas (Ajustes)."
+        return "That site is on your blocked list (Settings)."
     for s in settings["video_services"]:
         if any(host == d or host.endswith("." + d) for d in s["domains"]):
-            return None if s.get("enabled", True) else f"{s['name']} está desactivado en Ajustes."
+            return None if s.get("enabled", True) else f"{s['name']} is disabled in Settings."
     return None
 
 
 def site(url: str) -> str:
-    """El dominio base (cuevana.biz, rtve.es…): los enlaces a otros dominios se tratan como anuncios."""
+    """The base domain (cuevana.biz, rtve.es...): links to other domains are treated as ads."""
     return ".".join(_host(url).split(".")[-2:])
 
 
-# ---------- iniciar sesión con la cuenta guardada (webaccounts) ----------
-# rellena usuario y/o contraseña (también en los inicios de sesión de dos pasos: primero el correo, luego la
-# contraseña) y pulsa entrar. Devuelve "password", "user" o null si en la página no hay nada que rellenar.
+# ---------- sign in with the saved account (webaccounts) ----------
+# fills in the username and/or password (also on two-step logins: email first, then password) and presses
+# sign in. Returns "password", "user" or null if there is nothing to fill in on the page.
 LOGIN_JS = r"""((user, pass) => {
   const vis = e => e && e.offsetWidth > 0 && e.offsetHeight > 0 && !e.disabled;
   const set = (e, v) => {
@@ -136,8 +137,8 @@ LOGIN_JS = r"""((user, pass) => {
 })(%s, %s)"""
 
 
-# ---------- buscar en cualquier web ----------
-# escribe en la caja de búsqueda (si está escondida tras una lupa, pulsa la lupa); devuelve qué hizo
+# ---------- search on any site ----------
+# types into the search box (if it is hidden behind a magnifier icon, presses the icon); returns what it did
 SEARCH_JS = r"""((q) => {
   const vis = e => e && e.offsetWidth > 0 && e.offsetHeight > 0;
   const boxes = () => [...document.querySelectorAll('input[type=search], input[name=q], input[name=s], input[name=search], '
@@ -161,7 +162,7 @@ SEARCH_JS = r"""((q) => {
   return 'box';
 })(%s)"""
 
-# envía la búsqueda: el formulario de la caja, o Enter
+# submits the search: the box's form, or Enter
 SUBMIT_JS = r"""(() => {
   const box = document.activeElement;
   if (!box || box.tagName !== 'INPUT') return false;
@@ -172,7 +173,7 @@ SUBMIT_JS = r"""(() => {
   return true;
 })()"""
 
-# el primer resultado (en el orden de la página) que se parece a lo buscado, del mismo dominio y sin pinta de anuncio
+# the first result (in page order) that resembles the query, on the same domain and not looking like an ad
 PICK_JS = r"""((q, base) => {
   const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const words = norm(q).split(/[^a-z0-9]+/).filter(w => w.length > 1);
@@ -184,7 +185,7 @@ PICK_JS = r"""((q, base) => {
     if (!(a.offsetWidth > 0 && a.offsetHeight > 0)) continue;
     let u; try { u = new URL(a.href, location.href); } catch { continue; }
     if (!/^https?:$/.test(u.protocol)) continue;
-    if (u.hostname.split('.').slice(-2).join('.') !== base) continue;   // a otro dominio: anuncio
+    if (u.hostname.split('.').slice(-2).join('.') !== base) continue;   // other domain: ad
     if (u.href.split('#')[0] === here) continue;
     if (/[?&](q|s|search|query|keyword)=|\/(search|buscar|busqueda|login|signin|registro|register|genero|genre|category|categoria|tag)(\/|$)/i.test(u.pathname + u.search)) continue;
     if (a.closest('nav, header, footer, [class*="menu" i], [class*="pagination" i]')) continue;
@@ -196,13 +197,13 @@ PICK_JS = r"""((q, base) => {
     const text = norm([a.innerText, a.title, a.getAttribute('aria-label'), img && img.alt, path].join(' '));
     const score = words.filter(w => text.includes(w)).length / words.length;
     if (score > bestScore + 0.001) { best = u.href; bestScore = score; }
-    if (score === 1) break;   // el primero completo: ese
+    if (score === 1) break;   // the first full match: that one
   }
   return bestScore >= 0.5 ? best : null;
 })(%s, %s)"""
 
 
-# el vídeo llena la página (o su iframe) cuando está dentro del panel
+# the video fills the page (or its iframe) when inside the panel
 FILL_JS = """(() => {
   let best = null, area = 0;
   for (const v of document.querySelectorAll('video')) {
@@ -217,8 +218,8 @@ FILL_JS = """(() => {
   }
   document.querySelectorAll('[data-pepito-fill]').forEach(e => e !== best && e.removeAttribute('data-pepito-fill'));
   if (!best) return null;
-  // si ya ocupa casi toda la ventana (Netflix, Prime…) se deja como está: tocarlo descoloca su reproductor
-  if (!best.hasAttribute('data-pepito-fill') && area > innerWidth * innerHeight * .8) return 'ya lleno';
+  // if it already fills almost the whole window (Netflix, Prime...) leave it alone: touching it breaks its player
+  if (!best.hasAttribute('data-pepito-fill') && area > innerWidth * innerHeight * .8) return 'already full';
   best.setAttribute('data-pepito-fill', '');
   if (!document.getElementById('pepito-fill')) {
     const s = document.createElement('style');
@@ -244,9 +245,9 @@ class _POINT(ctypes.Structure):
 
 
 def _dpi_aware():
-    """Coordenadas en píxeles reales de pantalla (como las manda el panel)."""
-    try:   # va por hilo, y cada orden llega en uno distinto
-        _user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))   # por monitor v2
+    """Coordinates in real screen pixels (as the panel sends them)."""
+    try:   # it is per thread, and each command arrives on a different one
+        _user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))   # per-monitor v2
     except Exception:
         pass
 
@@ -256,7 +257,7 @@ def _listening(port: int) -> bool:
         return any(c.laddr and c.laddr.port == port and c.status == psutil.CONN_LISTEN
                    for c in psutil.net_connections("tcp4"))
     except psutil.Error:
-        return True   # sin poder mirarlo: se intenta como antes
+        return True   # cannot check: try as before
 
 
 class WebPlayer:
@@ -264,16 +265,16 @@ class WebPlayer:
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._id = 0
-        self._win: int | None = None   # la ventana de vídeo
-        self._logins = 0   # intentos de iniciar sesión en la web abierta (para no insistir si la contraseña falla)
-        self.wall: str | None = None   # web que ha pedido iniciar sesión al abrirla
-        self.rect: dict | None = None   # recuadro del widget en pantalla (píxeles reales)
-        self.docked = True              # dentro del panel; False = ventana normal (para iniciar sesión)
+        self._win: int | None = None   # the video window
+        self._logins = 0   # sign-in attempts on the open site (so it does not keep trying if the password fails)
+        self.wall: str | None = None   # site that asked to sign in when opened
+        self.rect: dict | None = None   # widget box on screen (real pixels)
+        self.docked = True              # inside the panel; False = normal window (to sign in)
 
     # ---------- CDP ----------
     def _targets(self) -> list[dict]:
-        # sin la ventana abierta, Windows tarda 1 s en rechazar la conexión: antes se mira si hay alguien
-        # escuchando (3 ms). Esto frenaba 1 s cada orden de voz (se pregunta si hay un vídeo web puesto)
+        # with no window open, Windows takes 1 s to refuse the connection: first check whether anyone is
+        # listening (3 ms). This used to delay every voice command by 1 s (it asks whether a web video is playing)
         if not _listening(PORT):
             return []
         try:
@@ -302,7 +303,7 @@ class WebPlayer:
         return (r.get("result") or {}).get("value")
 
     def _on_video(self, body: str):
-        """Ejecuta `body` sobre el vídeo principal (página o iframes). None si no hay vídeo."""
+        """Runs `body` on the main video (page or iframes). None if there is no video."""
         targets = [t for t in self._targets() if t.get("type") in ("page", "iframe")]
         targets.sort(key=lambda t: t.get("type") != "page")
         for t in targets:
@@ -310,9 +311,9 @@ class WebPlayer:
                 value = self._eval(t, FIND % body)
             except Exception:
                 continue
-            if value is not None and not isinstance(value, str):   # alguna web (Pluto) devuelve texto raro
+            if value is not None and not isinstance(value, str):   # some sites (Pluto) return odd text
                 return value
-        # el reproductor en un marco de otra web (Dailymotion…): no sale en /json, se llega por la página
+        # the player in a frame from another site (Dailymotion...): it is not in /json, reached through the page
         for page in [t for t in targets if t.get("type") == "page"][:1]:
             try:
                 for value in self._eval_subframes(page, FIND % body):
@@ -323,7 +324,7 @@ class WebPlayer:
         return None
 
     def _eval_subframes(self, page: dict, expression: str) -> list:
-        """Evalúa en los marcos de otras webs de la página (CDP auto-attach), que /json no lista."""
+        """Evaluates in the page's cross-site frames (CDP auto-attach), which /json does not list."""
         out = []
         with connect(page["webSocketDebuggerUrl"], open_timeout=3, close_timeout=1, max_size=None) as ws:
             ws.send(json.dumps({"id": 1, "method": "Target.setAutoAttach",
@@ -351,8 +352,8 @@ class WebPlayer:
                         return msg.get("result") or {}
                 return {}
 
-            # marcos de otro dominio en el mismo proceso (geo.dailymotion.com dentro de www.): un «mundo aislado» en
-            # cada uno comparte el DOM, así que se puede tocar su <video>; y los de otro proceso, por su sesión
+            # cross-domain frames in the same process (geo.dailymotion.com inside www.): an "isolated world" in
+            # each shares the DOM, so its <video> can be touched; frames in another process, via their session
             for sid in [None, *sessions]:
                 tree = ask(sid, "Page.getFrameTree", {}).get("frameTree") or {}
                 frames, stack = [], list(tree.get("childFrames") or []) + ([tree] if sid else [])
@@ -368,22 +369,22 @@ class WebPlayer:
                         out.append((r.get("result") or {}).get("value"))
         return out
 
-    # ---------- órdenes ----------
+    # ---------- commands ----------
     def _page(self) -> dict | None:
         pages = [t for t in self._targets() if t.get("type") == "page"]
         return pages[0] if pages else None
 
     def _kill_popups(self, seconds: float = 40):
-        """Cierra las pestañas o ventanas nuevas que abra la web (anuncios al pulsar): se queda solo la original."""
+        """Closes new tabs or windows the site opens (click ads): only the original stays."""
         end = time.monotonic() + seconds
         first = None
         while time.monotonic() < end:
             pages = [t for t in self._targets() if t.get("type") == "page"]
             if pages and first is None:
-                first = pages[-1]["id"]   # /json da primero la más reciente: la original es la última
+                first = pages[-1]["id"]   # /json lists the most recent first: the original is the last one
             for t in pages:
                 if first and t["id"] != first:
-                    log.info("Cierro ventana emergente: %s", t.get("url", "")[:100])
+                    log.info("Closing popup window: %s", t.get("url", "")[:100])
                     try:
                         httpx.get(f"http://127.0.0.1:{PORT}/json/close/{t['id']}", timeout=1)
                     except httpx.HTTPError:
@@ -391,14 +392,14 @@ class WebPlayer:
             time.sleep(0.5)
 
     def search_site(self, url: str, query: str, wait: float = 30) -> str | None:
-        """En una web cualquiera, con su portada ya abierta: busca «query» (su caja de búsqueda o, si no hay, las direcciones
-        de búsqueda típicas) y devuelve la URL del primer resultado que no sea anuncio. None si no encuentra nada."""
+        """On any site with its home page already open: searches for `query` (its search box or, failing that, the
+        typical search URLs) and returns the URL of the first result that is not an ad. None if nothing is found."""
         from urllib.parse import quote_plus
         base = site(url)
         root = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
         q = quote_plus(query)
         guesses = [f"{root}/search?q={q}", f"{root}/?s={q}", f"{root}/buscar?q={q}", f"{root}/search/{q}"]
-        # la portada ya la ha abierto quien llama (open)
+        # the caller (open) has already opened the home page
         enc = json.dumps
         box_done, misses, icons = False, 0, 0
         deadline = time.monotonic() + wait
@@ -413,44 +414,44 @@ class WebPlayer:
                 self._eval(page, video_sites.REJECT_JS)
                 if self.try_login(page, back_to=url):
                     continue
-                if box_done:   # ya se buscó: ¿hay resultados?
+                if box_done:   # already searched: are there results?
                     found = self._eval(page, PICK_JS % (enc(query), enc(base)))
                     if found:
                         return found
                     misses += 1
-                    if misses < 3:   # los resultados de algunas webs tardan en pintarse
+                    if misses < 3:   # on some sites the results take a while to render
                         continue
                     misses = 0
                 else:
                     did = self._eval(page, SEARCH_JS % enc(query))
                     if did == "icon" and icons < 2:
                         icons += 1
-                        continue   # la lupa despliega la caja: se escribe en la siguiente vuelta
+                        continue   # the magnifier icon opens the box: type into it on the next pass
                     box_done = True
                     if did == "box":
                         time.sleep(0.3)
-                        # Enter de verdad (por CDP): las webs hechas con React no hacen caso a uno simulado en JS
+                        # a real Enter (via CDP): React sites ignore one simulated in JS
                         for kind in ("keyDown", "keyUp"):
                             self._call(page, "Input.dispatchKeyEvent", {"type": kind, "key": "Enter", "code": "Enter",
                                                                         "windowsVirtualKeyCode": 13,
                                                                         **({"text": "\r"} if kind == "keyDown" else {})})
                         time.sleep(1)
                         if site(self._page().get("url", "")) == base:
-                            self._eval(page, SUBMIT_JS)   # por si el Enter no hizo nada: el formulario
+                            self._eval(page, SUBMIT_JS)   # in case Enter did nothing: the form
                         time.sleep(1.5)
                         continue
-                if guesses:   # sin caja, o la caja no dio nada: las direcciones de búsqueda más típicas
+                if guesses:   # no box, or the box gave nothing: the most typical search URLs
                     nxt = guesses.pop(0)
-                    log.info("Busco en %s probando %s", base, nxt)
+                    log.info("Searching %s by trying %s", base, nxt)
                     self._call(page, "Page.navigate", {"url": nxt})
                     time.sleep(2)
             except Exception as e:
-                log.info("Buscar en %s: %s", base, e)
+                log.info("Search on %s: %s", base, e)
         return None
 
     def try_login(self, page: dict, back_to: str | None = None) -> bool:
-        """Si la web pide cuenta y hay una guardada para ella, la rellena y entra (máx. 4 pasos por web abierta).
-        Con back_to vuelve a esa dirección al acabar (muchas webs te dejan en su portada tras entrar)."""
+        """If the site asks for an account and one is saved for it, fills it in and signs in (max. 4 steps per open site).
+        With back_to, returns to that address afterwards (many sites leave you on their home page after signing in)."""
         host = _host(page.get("url", ""))
         account = self._logins < 4 and webaccounts.get(host)
         if not account:
@@ -462,7 +463,7 @@ class WebPlayer:
         if not did:
             return False
         self._logins += 1
-        log.info("Inicio sesión en %s (%s)", host, "contraseña" if did == "password" else "usuario")
+        log.info("Signing in to %s (%s)", host, "password" if did == "password" else "user")
         if did == "password" and back_to:
             time.sleep(6)
             now = self._page()
@@ -474,7 +475,7 @@ class WebPlayer:
         return True
 
     def search_engine(self, url: str, query: str) -> str | None:
-        """Plan B: «site:dominio búsqueda» en un buscador, dentro de la propia ventana, y el primer resultado."""
+        """Plan B: \"site:domain query\" on a search engine, inside the same window, and the first result."""
         from urllib.parse import quote_plus
         domain = site(url)
         page = self._page()
@@ -482,7 +483,7 @@ class WebPlayer:
             return None
         for engine in video_sites.ENGINES:
             target = engine.format(q=quote_plus(f"site:{domain} {query}"))
-            log.info("Busco en el buscador: %s", target)
+            log.info("Searching with the search engine: %s", target)
             try:
                 self._call(page, "Page.navigate", {"url": target})
             except Exception:
@@ -506,36 +507,36 @@ class WebPlayer:
         self.wall = None
         self._logins = 0
         if pages:
-            try:   # algunas webs tardan en soltar la página anterior: la navegación sigue aunque no conteste
+            try:   # some sites are slow to release the previous page: navigation continues even if it does not answer
                 self._call(pages[0], "Page.navigate", {"url": url})
                 self._call(pages[0], "Page.bringToFront")
             except TimeoutError:
-                log.info("Edge tarda en cambiar de página")
+                log.info("Edge is slow to change page")
         else:
             if EDGE is None:
-                raise RuntimeError("No encuentro Edge")
+                raise RuntimeError("Edge not found")
             PROFILE.mkdir(parents=True, exist_ok=True)
-            # en ventana (mitad derecha), no a pantalla completa: eso se pide aparte
+            # windowed (right half), not full screen: that is requested separately
             self._proc = subprocess.Popen([
                 str(EDGE), f"--app={url}", f"--remote-debugging-port={PORT}", f"--user-data-dir={PROFILE}",
                 "--no-first-run", "--autoplay-policy=no-user-gesture-required",
-                # tapada por otras ventanas sigue «visible»: si no, RTVE deja de cargar el vídeo
+                # covered by other windows it still counts as "visible": otherwise RTVE stops loading the video
                 "--disable-features=Translate,CalculateNativeWinOcclusion", "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
-                # sin DirectComposition Windows respeta el recorte de la ventana (si no, se vería la barra de título)
+                # without DirectComposition Windows honors the window clipping (otherwise the title bar would show)
                 "--disable-direct-composition",
                 f"--host-rules={HOST_RULES}",
                 "--window-position=940,90", "--window-size=960,600"])
-        log.info("Web de vídeo: %s", url)
+        log.info("Web video: %s", url)
         threading.Thread(target=self._autoplay, args=(url,), daemon=True, name="webplayer-autoplay").start()
         threading.Thread(target=self._keep_docked, daemon=True, name="webplayer-dock").start()
-        if not video_sites.steps(_host(url)):   # las webs sin receta (las desconocidas) suelen abrir anuncios
+        if not video_sites.steps(_host(url)):   # sites without a recipe (unknown ones) tend to open ads
             threading.Thread(target=self._kill_popups, daemon=True, name="webplayer-popups").start()
 
-    # ---------- dentro del panel ----------
+    # ---------- inside the panel ----------
     def _hwnd(self) -> int | None:
-        """Ventana principal del Edge de vídeo (la más grande visible de su proceso)."""
-        # metida en el panel ya no es de primer nivel (EnumWindows no la ve): se recuerda
+        """Main window of the video Edge (the largest visible one of its process)."""
+        # once inside the panel it is no longer top-level (EnumWindows cannot see it): remember it
         if self._win and _user32.IsWindow(ctypes.c_void_p(self._win)) and _user32.GetParent(ctypes.c_void_p(self._win)):
             return self._win
         pid = self._proc.pid if self._proc and self._proc.poll() is None else None
@@ -574,7 +575,7 @@ class WebPlayer:
             return None
 
     def _panel_hwnd(self, video: int) -> int | None:
-        """La ventana del panel (Edge en modo app con título «Cortex»), que no sea la de vídeo."""
+        """The panel window (Edge in app mode titled \"Cortex\"), other than the video one."""
         found = []
 
         @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
@@ -591,7 +592,7 @@ class WebPlayer:
         return found[0] if found else None
 
     def _set_child(self, h: ctypes.c_void_p, parent: int | None) -> None:
-        """Mete la ventana de vídeo dentro del panel (parent) o la vuelve a soltar (None)."""
+        """Puts the video window inside the panel (parent) or releases it again (None)."""
         GWL_STYLE, WS_CHILD, WS_POPUP, WS_CAPTION, WS_THICKFRAME = -16, 0x40000000, 0x80000000, 0x00C00000, 0x00040000
         get = getattr(_user32, "GetWindowLongPtrW", _user32.GetWindowLongW)
         put = getattr(_user32, "SetWindowLongPtrW", _user32.SetWindowLongW)
@@ -608,7 +609,7 @@ class WebPlayer:
             put(h, GWL_STYLE, (style & ~WS_CHILD) | WS_CAPTION | WS_THICKFRAME)
 
     def dock(self, rect: dict | None = None) -> bool:
-        """Coloca la página justo en el recuadro del widget, dentro de la ventana del panel y sin marco."""
+        """Places the page exactly in the widget's box, inside the panel window and frameless."""
         if rect:
             self.rect = rect
         self.docked = True
@@ -623,22 +624,22 @@ class WebPlayer:
         h = ctypes.c_void_p(hwnd)
         panel = _user32.GetParent(h) or self._panel_hwnd(hwnd)
         if panel and _user32.IsIconic(ctypes.c_void_p(panel)):
-            return False   # panel minimizado: al volver, el panel manda su recuadro y se coloca entonces
+            return False   # panel minimized: when it returns, the panel sends its box and the page is placed then
         if panel:
             self._set_child(h, panel)
-        _user32.SetWindowRgn(h, None, False)   # medir sin recorte
+        _user32.SetWindowRgn(h, None, False)   # measure without clipping
         wr, cr, org = _RECT(), _RECT(), _POINT(0, 0)
         _user32.GetWindowRect(h, ctypes.byref(wr))
         _user32.GetClientRect(h, ctypes.byref(cr))
         _user32.ClientToScreen(h, ctypes.byref(org))
-        title = max(0, round(cr.bottom - m[0]))          # barra de título (dentro del área de cliente)
-        dx = org.x - wr.left                               # borde invisible de la izquierda
+        title = max(0, round(cr.bottom - m[0]))          # title bar (inside the client area)
+        dx = org.x - wr.left                               # invisible left border
         dy = org.y - wr.top + title
         right = wr.right - (org.x + cr.right)
         bottom = wr.bottom - (org.y + cr.bottom)
-        dy += 3   # el borde de arriba de la página también fuera
+        dy += 3   # the page's top border outside as well
         x, y, w, hh = int(r["x"]), int(r["y"]), int(r["w"]), int(r["h"])
-        try:   # sin esquinas redondeadas ni borde de Windows 11
+        try:   # no rounded corners or Windows 11 border
             dwm = ctypes.windll.dwmapi
             dwm.DwmSetWindowAttribute(h, 33, ctypes.byref(ctypes.c_int(1)), 4)
             dwm.DwmSetWindowAttribute(h, 34, ctypes.byref(ctypes.c_uint(0xFFFFFFFE)), 4)
@@ -646,20 +647,20 @@ class WebPlayer:
             pass
         SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOZORDER, SWP_FRAMECHANGED = 0x0010, 0x0040, 0x0004, 0x0020
         pos = _POINT(x - dx, y - dy)
-        if panel:   # dentro del panel las coordenadas van respecto a él
+        if panel:   # inside the panel, coordinates are relative to it
             _user32.ScreenToClient(ctypes.c_void_p(panel), ctypes.byref(pos))
             _user32.SetWindowPos(h, ctypes.c_void_p(0), pos.x, pos.y, w + dx + right, hh + dy + bottom,
                                  SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED)
-        else:   # sin panel a la vista (no debería pasar): como antes, encima
+        else:   # no panel in sight (should not happen): as before, on top
             _user32.SetWindowPos(h, ctypes.c_void_p(-1), pos.x, pos.y, w + dx + right, hh + dy + bottom,
                                  SWP_NOACTIVATE | SWP_SHOWWINDOW)
         rgn = _gdi32.CreateRectRgn(dx, dy, dx + w, dy + hh)
-        _user32.SetWindowRgn(h, ctypes.c_void_p(rgn), True)   # Windows se queda con la región
+        _user32.SetWindowRgn(h, ctypes.c_void_p(rgn), True)   # Windows takes ownership of the region
         self._fill(True)
         return True
 
     def undock(self) -> bool:
-        """Ventana normal y delante (para iniciar sesión o verlo a tu aire)."""
+        """Normal window, in front (to sign in or watch at leisure)."""
         self.docked = False
         _dpi_aware()
         hwnd = self._hwnd()
@@ -677,10 +678,10 @@ class WebPlayer:
         return True
 
     def hide(self) -> None:
-        """Fuera de la vista (p. ej. con el widget de Vídeos oculto): se queda sonando, sin verse."""
+        """Out of sight (e.g. with the Videos widget hidden): keeps playing, unseen."""
         hwnd = self._hwnd()
         if hwnd and self.docked:
-            _user32.ShowWindow(ctypes.c_void_p(hwnd), 0)   # SW_HIDE; dock() la vuelve a enseñar
+            _user32.ShowWindow(ctypes.c_void_p(hwnd), 0)   # SW_HIDE; dock() shows it again
 
     def _fill(self, on: bool) -> None:
         for t in [t for t in self._targets() if t.get("type") in ("page", "iframe")]:
@@ -690,7 +691,7 @@ class WebPlayer:
                 pass
 
     def _keep_docked(self):
-        """La ventana tarda en salir y las webs cambian de página: se recoloca un rato tras abrir."""
+        """The window is slow to appear and sites change page: it is repositioned for a while after opening."""
         for i in range(20):
             time.sleep(1.5)
             if self.wall:
@@ -699,7 +700,7 @@ class WebPlayer:
             if self.docked and self.rect and self.active():
                 self.dock()
 
-    # primer resultado de la búsqueda de cada web con sesión → URL que lo reproduce
+    # first search result of each site that needs a login -> URL that plays it
     PICK_JS = {
         "netflix": """(() => { const a = document.querySelector('[data-uia=gallery] [data-uia=standard-card], [data-uia=search-gallery-video-card] a');
             const id = a && (new URL(a.href, location.href).searchParams.get('jbv') || (a.href.match(/\\/(?:watch|title)\\/(\\d+)/) || [])[1]);
@@ -709,7 +710,7 @@ class WebPlayer:
     }
 
     def pick_result(self, service: str, wait: float = 15) -> str | None:
-        """Con la búsqueda abierta, espera a los resultados y devuelve la URL para ver el primero."""
+        """With the search open, waits for the results and returns the URL to watch the first one."""
         js = self.PICK_JS.get(service)
         deadline = time.monotonic() + wait
         while js and time.monotonic() < deadline:
@@ -726,25 +727,25 @@ class WebPlayer:
         return None
 
     def _autoplay(self, url: str):
-        """Hasta 30 s: rechaza el aviso de cookies, pulsa el play de esa web (video_sites) o uno genérico, y
-        si hay vídeo parado le da al play con sonido. Para cuando lo ve sonando dos veces seguidas."""
-        site = lambda u: ".".join(_host(u).split(".")[-2:])   # rtve.es, pluto.tv…
+        """Up to 30 s: rejects the cookie notice, presses that site's play button (video_sites) or a generic one,
+        and if a video is stopped, plays it with sound. Stops once it sees it playing twice in a row."""
+        site = lambda u: ".".join(_host(u).split(".")[-2:])   # rtve.es, pluto.tv...
         recipe = video_sites.steps(_host(url))
         if "/watch/" in urlparse(url).path:
-            recipe = []   # Netflix arranca solo; su botón de play en el reproductor lo pausaría
+            recipe = []   # Netflix starts by itself; its in-player play button would pause it
         if urlparse(url).path.rstrip("/") in ("", "/browse", "/home", "/inicio", "/play"):
-            return   # la portada de un servicio: se abre y eliges tú (si no, Netflix pone lo primero que vea)
+            return   # a service's home page: it opens and you choose (otherwise Netflix plays the first thing it sees)
         playing = clicked = stuck = 0
         for _ in range(30):
             time.sleep(1)
             pages = [t for t in self._targets() if t.get("type") == "page"]
             if not pages or site(pages[0].get("url", "")) != site(url):
-                continue   # aún está la página anterior
+                continue   # the previous page is still showing
             try:
                 self._eval(pages[0], video_sites.REJECT_JS)
             except Exception:
                 pass
-            # solo hasta que suene: si luego Charlie lo pausa, se queda pausado
+            # only until it plays: if the user pauses it later, it stays paused
             state = self._on_video("if (!v.dataset.pepitoOn) { if (v.paused) v.play(); "
                                    "else { v.dataset.pepitoOn = 1; v.muted = false; } } " + STATE)
             if state and not state["paused"]:
@@ -760,11 +761,11 @@ class WebPlayer:
                 wall = state is None and stuck >= 3 and self._eval(pages[0], video_sites.WALL_JS)
             except Exception:
                 wall = None
-            if wall:   # pide cuenta: eso lo hace Charlie, no Cortex
-                log.info("Autoplay: %s pide iniciar sesión (%s)", _host(url), wall)
+            if wall:   # asks for an account: the user does that, not Cortex
+                log.info("Autoplay: %s asks to sign in (%s)", _host(url), wall)
                 self.wall = _host(url)
                 return
-            # sin vídeo, o con vídeo que no arranca con play(): se pulsa el botón (no a la vez que play(), que lo pararía)
+            # no video, or a video that does not start with play(): press the button (not together with play(), which would stop it)
             if clicked < 3 and (state is None or stuck % 3 == 0):
                 try:
                     hit = ((recipe and self._eval(pages[0], video_sites.click_js(recipe)))
@@ -773,7 +774,7 @@ class WebPlayer:
                 except Exception:
                     hit = None
                 if hit:
-                    log.info("Autoplay: pulso %s", hit)
+                    log.info("Autoplay: pressing %s", hit)
                     clicked += 1
 
     def command(self, action: str, value: float | None = None) -> None:
@@ -792,10 +793,10 @@ class WebPlayer:
         st = self._on_video(STATE)
         page = self._page()
         title = page.get("title", "") if page else ""
-        if not isinstance(st, dict) or not st:   # webs raras devuelven texto, números… en vez del estado
+        if not isinstance(st, dict) or not st:   # odd sites return text, numbers... instead of the state
             return {"playing": True, "source": "web", "docked": self.docked, "title": title,
                     "paused": True, "pos": None, "duration": None}
-        # el título de la página, no el del reproductor («Dailymotion Video Player»)
+        # the page title, not the player's ("Dailymotion Video Player")
         return {"playing": True, "source": "web", "docked": self.docked, **st, "title": title or st.get("title", "")}
 
     def close(self) -> None:

@@ -1,5 +1,5 @@
-"""Copia el panel de Hub (web/hub/) a la demo de la web: `python site/build.py`. El resultado va al repositorio porque Vercel
-publica site/ tal cual (sin compilar); tests/test_site.py falla si se queda atrás."""
+"""Copies the Hub panel (web/hub/) into the web demo: `python site/build.py`. The output is committed because Vercel
+publishes site/ as is (no build step); tests/test_site.py fails if it falls behind."""
 
 import json
 import sys
@@ -13,7 +13,7 @@ PRIVATE = {"data_dir": "", "user_name": "", "mic_device": None, "speaker_device"
 
 
 def outputs() -> dict[Path, bytes]:
-    """Archivo generado → contenido. Siempre con saltos \\n, para que no dependa de git en Windows."""
+    """Generated file → content. Always with \\n line endings, so it does not depend on git on Windows."""
     from hub.config import DEFAULTS
     text = lambda p: p.read_bytes().replace(b"\r\n", b"\n")  # noqa: E731
     out = {SITE / "static" / p.relative_to(ROOT / "web" / "hub"): text(p)
@@ -22,7 +22,7 @@ def outputs() -> dict[Path, bytes]:
     first = '<script src="/static/vendor/gridstack-all.js"></script>'
     assert html.count(first) == 1 and html.count("<title>Cortex</title>") == 1
     html = html.replace(first, '<script src="/demo/defaults.js"></script>\n<script src="/demo/mock.js"></script>\n' + first)
-    html = html.replace("<title>Cortex</title>", "<title>Cortex · demo web</title>\n<meta name=\"robots\" content=\"noindex\">")
+    html = html.replace("<title>Cortex</title>", "<title>Cortex · web demo</title>\n<meta name=\"robots\" content=\"noindex\">")
     out[SITE / "demo" / "index.html"] = html.encode("utf-8")
     defaults = json.dumps({**DEFAULTS, **PRIVATE}, ensure_ascii=False, indent=1)
     out[SITE / "demo" / "defaults.js"] = f"window.CORTEX_DEFAULTS = {defaults};\n".encode("utf-8")

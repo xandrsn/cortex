@@ -1,7 +1,7 @@
-"""Avisos programados (fase 4): solo los que Charlie pide; viven en avisos.yaml (Drive) para que se vean desde el móvil.
+"""Scheduled reminders (phase 4): only the ones the user asks for; they live in avisos.yaml (Drive) so they show on the phone.
 
-Claude los crea con una etiqueta [[aviso: AAAA-MM-DD HH:MM | texto | repetición]] que el orquestador
-quita del texto y guarda aquí. Repeticiones: diario, laborables, findes, semanal, mensual (o nada).
+Claude creates them with a [[aviso: YYYY-MM-DD HH:MM | text | repeat]] tag that the orchestrator
+strips from the text and stores here. Repeats: diario, laborables, findes, semanal, mensual (or none).
 """
 
 import logging
@@ -13,13 +13,13 @@ from datetime import datetime, timedelta
 import yaml
 
 from .config import settings
-from .datos import DAYS_ES, MONTHS_ES, folder
+from .datos import DAYS_EN, DAYS_ES, MONTHS_EN, MONTHS_ES, folder
 
 log = logging.getLogger("avisos")
 
-HEADER = ("# Avisos programados. Solo los que Charlie programe o pida programar: Cortex no se inventa ninguno.\n"
-          "# Los gestiona Cortex (también desde el panel). cuando: AAAA-MM-DD HH:MM · repetir: diario, laborables,\n"
-          "# findes, semanal, mensual o vacío.\n\n")
+HEADER = ("# Scheduled reminders. Only the ones the user schedules or asks to schedule: Cortex invents none.\n"
+          "# Managed by Cortex (also from the panel). cuando: YYYY-MM-DD HH:MM · repetir: diario, laborables,\n"
+          "# findes, semanal, mensual or empty.\n\n")
 REPEATS = {"", "diario", "laborables", "findes", "semanal", "mensual"}
 TAG = re.compile(r"\[\[\s*aviso\s*:\s*(.+?)\]\]", re.I | re.S)
 DELETE_TAG = re.compile(r"\[\[\s*borrar[ _]aviso\s*:\s*(.+?)\]\]", re.I | re.S)
@@ -32,20 +32,20 @@ def _path():
 
 
 def load(strict: bool = False) -> list[dict]:
-    """strict=True para leer antes de guardar: si el archivo está roto (editado a mano) mejor fallar que
-    sobrescribirlo y perder los avisos que hubiera."""
+    """strict=True when reading before saving: if the file is broken (hand-edited) it is better to fail than
+    to overwrite it and lose the reminders it held."""
     try:
         data = yaml.safe_load(_path().read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         return []
     except yaml.YAMLError as e:
-        log.error("avisos.yaml no es YAML válido: %s", e)
+        log.error("avisos.yaml is not valid YAML: %s", e)
         if strict:
-            raise ValueError("avisos.yaml está mal escrito; arréglalo antes de cambiar avisos") from e
+            raise ValueError("avisos.yaml is malformed; fix it before changing reminders") from e
         return []
     if not isinstance(data, dict):
         if strict:
-            raise ValueError("avisos.yaml no tiene la forma «avisos: …»")
+            raise ValueError("avisos.yaml does not have the form 'avisos: ...'")
         return []
     return [a for a in data.get("avisos") or [] if isinstance(a, dict)]
 
@@ -75,7 +75,7 @@ def add(when: datetime, text: str, repeat: str = "") -> dict:
         avisos = load(strict=True)
         avisos.append(item)
         save(avisos)
-    log.info("Aviso nuevo: %s", item)
+    log.info("New reminder: %s", item)
     return item
 
 
@@ -84,32 +84,32 @@ def delete(aviso_id: str) -> bool:
         try:
             avisos = load(strict=True)
         except ValueError as e:
-            log.warning("No borro el aviso %s: %s", aviso_id, e)
+            log.warning("Not deleting reminder %s: %s", aviso_id, e)
             return False
         left = [a for a in avisos if str(a.get("id")) != str(aviso_id)]
         if len(left) == len(avisos):
             return False
         save(left)
-    log.info("Aviso borrado: %s", aviso_id)
+    log.info("Reminder deleted: %s", aviso_id)
     return True
 
 
 def from_tag(body: str) -> dict | None:
-    """«2026-10-24 18:00 | tender la ropa | semanal» → aviso guardado."""
+    """'2026-10-24 18:00 | hang the laundry | semanal' -> saved reminder."""
     parts = [p.strip() for p in body.split("|")]
     when = parse_when(parts[0]) if parts else None
     if not when or len(parts) < 2 or not parts[1]:
-        log.warning("Etiqueta de aviso no válida: %r", body)
+        log.warning("Invalid reminder tag: %r", body)
         return None
     try:
         return add(when, parts[1], parts[2] if len(parts) > 2 else "")
     except ValueError as e:
-        log.warning("No guardo el aviso %r: %s", body, e)
+        log.warning("Not saving reminder %r: %s", body, e)
         return None
 
 
 def _next(when: datetime, repeat: str, day: int | None = None) -> datetime | None:
-    """day: el día del mes original de un aviso mensual (el 31 cae el 30 o el 28, pero luego vuelve al 31)."""
+    """day: the original day of the month of a monthly reminder (the 31st falls on the 30th or 28th, then goes back to the 31st)."""
     if repeat == "diario":
         return when + timedelta(days=1)
     if repeat == "semanal":
@@ -139,7 +139,7 @@ def in_quiet_hours(now: datetime) -> bool:
 
 
 def due(now: datetime) -> list[dict]:
-    """Avisos que tocan ya. Los únicos se marcan como hechos; los repetidos pasan a la siguiente vez."""
+    """Reminders due now. One-off ones are marked done; repeating ones move to their next time."""
     if in_quiet_hours(now):
         return []
     fired = []
@@ -151,8 +151,8 @@ def due(now: datetime) -> list[dict]:
             if not a.get("activo", True) or not when or when > now:
                 continue
             if now - when > timedelta(hours=12):
-                # muy atrasado (portátil apagado): no se suelta de golpe, pero sí pasa a la siguiente vez
-                log.info("Aviso atrasado, no lo digo: %s", a)
+                # long overdue (laptop was off): not announced at once, but it still moves to its next time
+                log.info("Overdue reminder, not announcing it: %s", a)
             else:
                 fired.append(dict(a))
             day = a.get("dia") or when.day
@@ -173,8 +173,18 @@ def due(now: datetime) -> list[dict]:
     return fired
 
 
-def say_when(when: datetime, now: datetime) -> str:
+def say_when(when: datetime, now: datetime, en: bool = True) -> str:
     today = now.date()
+    if en:
+        if when.date() == today:
+            day = "today"
+        elif when.date() == today + timedelta(days=1):
+            day = "tomorrow"
+        elif 0 < (when.date() - today).days < 7:
+            day = f"on {DAYS_EN[when.weekday()]}"
+        else:
+            day = f"on {MONTHS_EN[when.month - 1]} {when.day}"
+        return f"{day} at {when:%H:%M}"
     if when.date() == today:
         day = "hoy"
     elif when.date() == today + timedelta(days=1):

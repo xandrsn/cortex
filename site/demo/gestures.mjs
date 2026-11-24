@@ -1,19 +1,19 @@
-// Escritorio de ejemplo que se mueve con la mano. La cámara es opcional y se procesa en el navegador: no sale ningún vídeo.
-// La lógica (classify, snapZone) no toca el DOM y se prueba con node.
+// Sample desktop moved by hand. The camera is optional and processed in the browser: no video leaves it.
+// The logic (classify, snapZone) does not touch the DOM and is tested with node.
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 export function classify(lm) {
   const out = (tip, pip) => dist(lm[tip], lm[0]) > dist(lm[pip], lm[0]) * 1.15;
   const [i, m, r, p] = [out(8, 6), out(12, 10), out(16, 14), out(20, 18)];
-  if (dist(lm[4], lm[8]) / (dist(lm[0], lm[9]) || 1) < 0.35 && (m || r || p)) return "pinch";   // un puño también junta pulgar e índice
+  if (dist(lm[4], lm[8]) / (dist(lm[0], lm[9]) || 1) < 0.35 && (m || r || p)) return "pinch";   // a fist also brings thumb and index together
   if (i && m && r && p) return "palm";
   if (i && m && !r && !p) return "peace";
   if (!i && !m && !r && !p) return "fist";
   return "none";
 }
 
-/** Dónde encaja la ventana al soltarla (x, y de 0 a 1). Solo cerca de los bordes. */
+/** Where the window snaps when released (x, y from 0 to 1). Only near the edges. */
 export function snapZone(x, y) {
   if (y < 0.06) return "full";
   if (x < 0.08) return "left";
@@ -49,7 +49,7 @@ function start() {
     const [l, t, w] = frame(held);
     held.style.zIndex = ++top;
     held.classList.add("held");
-    if (held.dataset.zone) {   // estaba encajada: vuelve a su tamaño bajo la mano
+    if (held.dataset.zone) {   // it was snapped: back to its size under the hand
       held.dataset.zone = "";
       place(held, x * 100 - 17, y * 100 - 3, 34, 44);
       dx = 17; dy = 3;
@@ -74,7 +74,7 @@ function start() {
     zone("");
   }
 
-  // ---------- ratón, dedo y teclado ----------
+  // ---------- mouse, finger and keyboard ----------
   const rel = e => { const b = desk.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
   desk.addEventListener("pointerdown", e => { grab(...rel(e)); if (held) desk.setPointerCapture(e.pointerId); });
   desk.addEventListener("pointermove", e => move(...rel(e)));
@@ -90,20 +90,20 @@ function start() {
     });
   });
 
-  // ---------- cámara ----------
+  // ---------- camera ----------
   let stream = null, landmarker = null, raf = 0, last = "none", steady = 0, gesture = "none", fistAt = 0, busy = false;
-  function stop(text = "Cámara apagada. También puedes arrastrar con el ratón o con las flechas.") {
+  function stop(text = "Camera off. You can also drag with the mouse or use the arrow keys.") {
     cancelAnimationFrame(raf);
     stream?.getTracks().forEach(t => t.stop());
     stream = null;
     video.srcObject = null;
     cursor.hidden = true;
     drop();
-    button.textContent = "Activar la cámara";
+    button.textContent = "Turn on the camera";
     status.textContent = text;
   }
   async function begin() {
-    status.textContent = "Cargando el modelo de manos…";
+    status.textContent = "Loading the hand model…";
     if (!landmarker) {
       const mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/vision_bundle.mjs");
       const files = await mp.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/wasm");
@@ -113,8 +113,8 @@ function start() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
     video.srcObject = stream;
     await video.play();
-    button.textContent = "Apagar la cámara";
-    status.textContent = "Enseña la mano.";
+    button.textContent = "Turn off the camera";
+    status.textContent = "Show your hand.";
     loop();
   }
   function loop() {
@@ -123,7 +123,7 @@ function start() {
     const hand = landmarker.detectForVideo(video, performance.now()).landmarks[0];
     if (!hand) { cursor.hidden = true; drop(); gesture = last = "none"; return; }
     const now = classify(hand);
-    steady = now === last ? steady + 1 : 0;   // 3 fotogramas iguales: un temblor no suelta la ventana
+    steady = now === last ? steady + 1 : 0;   // 3 identical frames: a tremor does not drop the window
     last = now;
     const x = Math.min(1, Math.max(0, (1 - (hand[4].x + hand[8].x) / 2 - .15) / .7)), y = Math.min(1, Math.max(0, ((hand[4].y + hand[8].y) / 2 - .15) / .7));
     cursor.hidden = false;
@@ -135,7 +135,7 @@ function start() {
       if (now === "fist") fistAt = performance.now();
       if (now === "palm" && performance.now() - fistAt < 1200) { const w = winAt(x, y); if (w) { w.style.zIndex = ++top; fit(w, "full"); } }
       gesture = now;
-      status.textContent = { pinch: "Cogida: muévela y suelta cerca de un borde.", palm: "Mano abierta.", fist: "Puño: ábrelo para maximizar.", peace: "Paz: en Cortex activa o para los gestos.", none: "Enseña la mano." }[now];
+      status.textContent = { pinch: "Grabbed: move it and release near an edge.", palm: "Open hand.", fist: "Fist: open it to maximize.", peace: "Peace: in Cortex it turns gestures on or off.", none: "Show your hand." }[now];
     }
     move(x, y);
   }
@@ -144,7 +144,7 @@ function start() {
     if (busy) return;
     busy = true;
     try { await begin(); }
-    catch (e) { stop(e.name === "NotAllowedError" ? "Sin permiso de cámara. Puedes arrastrar con el ratón." : "No se ha podido usar la cámara aquí. Puedes arrastrar con el ratón."); }
+    catch (e) { stop(e.name === "NotAllowedError" ? "No camera permission. You can drag with the mouse." : "The camera could not be used here. You can drag with the mouse."); }
     busy = false;
   });
   addEventListener("pagehide", () => stop());

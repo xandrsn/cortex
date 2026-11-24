@@ -1,6 +1,6 @@
-"""Temporizadores de cocina («Cortex, pon un temporizador de 10 minutos para la pasta»).
+"""Kitchen timers ("Cortex, pon un temporizador de 10 minutos para la pasta").
 
-Se guardan en logs/timers.json para sobrevivir a un reinicio. El orquestador llama a due() cada segundo.
+Saved in logs/timers.json to survive a restart. The orchestrator calls due() every second.
 """
 
 import json
@@ -39,7 +39,7 @@ def _num(word: str) -> float:
 
 
 def parse(text: str) -> tuple[int, str] | None:
-    """«pon un temporizador de 10 minutos para la pasta» → (600, "pasta") (el artículo se quita)."""
+    """'pon un temporizador de 10 minutos para la pasta' -> (600, "pasta") (the article is dropped)."""
     m = SET_RE.search(text)
     if not m:
         return None
@@ -63,7 +63,7 @@ def _save():
         FILE.parent.mkdir(parents=True, exist_ok=True)
         FILE.write_text(json.dumps(_timers, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
-        log.warning("No pude guardar los temporizadores: %s", e)
+        log.warning("Could not save the timers: %s", e)
 
 
 def load():
@@ -79,12 +79,12 @@ def add(seconds: int, label: str = "") -> dict:
     with _lock:
         _timers.append(t)
         _save()
-    log.info("Temporizador de %d s (%s)", seconds, label or "sin nombre")
+    log.info("Timer of %d s (%s)", seconds, label or "unnamed")
     return t
 
 
 def cancel(timer_id: str | None = None) -> int:
-    """Quita uno (por id) o todos. Devuelve cuántos quitó."""
+    """Remove one (by id) or all. Returns how many were removed."""
     with _lock:
         before = len(_timers)
         _timers[:] = [t for t in _timers if timer_id and t["id"] != timer_id]
@@ -98,7 +98,7 @@ def active() -> list[dict]:
 
 
 def due() -> list[dict]:
-    """Los que acaban de terminar (y los quita)."""
+    """Those that just finished (and removes them)."""
     now = time.time()
     with _lock:
         done = [t for t in _timers if t["end"] <= now]

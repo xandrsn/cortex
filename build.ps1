@@ -62,8 +62,8 @@ if ($Bridge) {
 $apps = [ordered]@{ Hub = "cortex-hub.iss"; Sense = "cortex-sense.iss" }
 foreach ($name in $apps.Keys) {
     if ($Only -and $Only -ne $name) { continue }
-    $d = if ($name -eq "Hub") { $defs } else { @("/DAppVersion=$Version") }
-    & "$inno\tools\ISCC.exe" /Q @d "$PSScriptRoot\installer\$($apps[$name])"
+    [string[]]$d = if ($name -eq "Hub") { $defs } else { "/DAppVersion=$Version" }
+    & "$inno\tools\ISCC.exe" /Q $d "$PSScriptRoot\installer\$($apps[$name])"
     if ($LASTEXITCODE -ne 0) { throw "ISCC ($name) failed" }
     $out = Get-Item "$PSScriptRoot\dist\Cortex${name}Setup.exe"
     "Done: $out ($([math]::Round($out.Length / 1MB, 1)) MB) SHA256 $((Get-FileHash $out).Hash)"

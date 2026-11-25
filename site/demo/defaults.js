@@ -88,7 +88,7 @@ window.CORTEX_DEFAULTS = {
  "piper_es": "es_ES-davefx-medium",
  "piper_en": "en_US-lessac-medium",
  "notice_language": "en",
- "theme": "light",
+ "theme": "dark",
  "spotify_device": "",
  "ui_port": 8765,
  "setup_done": false,
@@ -100,7 +100,7 @@ window.CORTEX_DEFAULTS = {
   "whatsapp"
  ],
  "whatsapp_mode": "read",
- "accent": "#0b8f55",
+ "accent": "#1db954",
  "text_scale": 1,
  "ambient_minutes": 10,
  "weather_place": {

@@ -31,5 +31,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/demo/gestures.html",
+      "destination": "/sense/",
+      "permanent": true
+    }
   ]
 }

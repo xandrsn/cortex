@@ -11,7 +11,7 @@
   <div class="brand"><span class="logo">✋</span> Cortex <b>Sense</b></div>
   <div class="pills">
     <span class="pill" id="pCam">camera …</span>
-    <span class="pill" id="pHub" title="Cortex Hub runs the music, voice and assistant actions">Hub …</span>
+    <span class="pill" id="pHub" title="Optional: Sense also works with Cortex Hub">Hub …</span>
     <label class="pill switch-pill"><input type="checkbox" id="enabled"> gestures</label>
     <button class="ghost" id="recal">Recalibrate</button>
   </div>
@@ -72,8 +72,8 @@
 
   <section class="card map">
     <div class="head"><h3>Gestures → commands</h3><input type="search" id="filter" placeholder="Filter"></div>
-    <p class="muted">Hub actions run in Cortex Hub when it is open; without Hub, music actions fall back to
-      the media keys. Shortcuts look like <code>ctrl+shift+m</code>; programs can be a path or a URL.</p>
+    <p class="muted">Pick what each movement does: from "minimise everything" or "next track" to a keyboard shortcut,
+      an app, a website or your own script (<code>.ps1</code>, <code>.py</code>, <code>.bat</code>). Press <b>Try</b> to run it now.</p>
     <div id="table" class="table"></div>
     <p class="error" id="mapErr" hidden></p>
   </section>

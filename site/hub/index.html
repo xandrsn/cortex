@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cortex Hub · a voice assistant and dashboard for Windows</title>
+<meta name="description" content="Cortex Hub: say “Cortex”, ask, and it answers through Claude and runs your music, timers, reminders, mail and weather from one dashboard.">
+<link rel="stylesheet" href="/landing.css">
+</head><body>
+<header class="wrap"><nav aria-label="Main"><b>Cortex Hub</b><a href="#try">Try it</a><a href="#install">Install</a><a href="#accounts">Accounts</a><a href="#privacy">Privacy</a><a href="https://github.com/xandrsn/cortex">GitHub</a></nav></header>
+<main>
+<div class="wrap hero">
+  <h1>Your day, one word away.</h1>
+  <p class="lead">Say “Cortex” and ask. Speech is recognised on your PC, answered by Claude with your own account and spoken back. The dashboard keeps your music, timers, reminders, shopping list, mail and weather in one place.</p>
+  <div class="row"><a class="btn" href="/demo/">Open the web demo</a><a class="btn alt" href="https://github.com/xandrsn/cortex/releases">Download for Windows</a></div>
+  <p class="small">v0.3.0 · Windows 10/11, 64-bit · Compatible with <a href="/">Cortex Sense</a> (gestures), not required.</p>
+</div>
+
+<section id="try"><div class="wrap">
+  <h2>What you can try here</h2>
+  <p>The demo is the real panel with made-up data, saved only in your browser. Every card says whether it works or only shows the idea.</p>
+  <div class="sub"><span class="tag">Works in your browser</span></div>
+  <div class="grid">
+    <div class="card"><h3>Your day</h3><p>Tasks, reminders, timers, shopping list, gym and meals. Add, tick off and edit them.</p></div>
+    <div class="card"><h3>Typed commands</h3><p>Write “add milk to the list” or “timer for 5 minutes” (Spanish works too). The demo understands a few fixed phrases; the app uses Claude.</p></div>
+    <div class="card"><h3>Live weather</h3><p>A real forecast from Open-Meteo.</p></div>
+    <div class="card"><h3>Layout</h3><p>Choose, move and resize widgets, and switch the theme.</p></div>
+    <div class="card"><h3>Setup wizard</h3><p>Walk through the same first-run steps as the app. It never asks for a real password.</p></div>
+  </div>
+  <div class="sub"><span class="tag idea">Concept only on this site</span></div>
+  <div class="grid">
+    <div class="card"><h3>Voice</h3><p>In the app you say “Cortex…” and the voice assistant answers aloud. The microphone stays on while it waits for that word; that audio is processed on your PC.</p></div>
+    <div class="card"><h3>Spotify</h3><p>Play, skip and choose music. Here the player is a mock-up.</p></div>
+    <div class="card"><h3>Email and WhatsApp</h3><p>Summaries of what needs a reply. Here the messages are invented.</p></div>
+    <div class="card"><h3>Speakers and devices</h3><p>Change the audio output and volume by voice.</p></div>
+    <div class="card"><h3>Money</h3><p>Balances through Enable Banking, with your own keys.</p></div>
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <h2>Install</h2>
+  <p>One installer, no administrator rights needed. Windows may warn you because it is not signed.</p>
+  <ol class="steps grid">
+    <li class="card"><h3>Run CortexHubSetup.exe</h3><p>Choose the language and the folder.</p></li>
+    <li class="card"><h3>Pick your widgets</h3><p>Tick the cards you want on the panel. You can change them later.</p></li>
+    <li class="card"><h3>Pick your accounts</h3><p>Claude, Spotify, email or none. The installer never asks for a password.</p></li>
+    <li class="card"><h3>Sign in, one at a time</h3><p>Cortex opens a wizard that guides each login. You can skip any of them.</p></li>
+  </ol>
+  <p class="small">You need a microphone and speakers for voice. The speech model downloads the first time.</p>
+</div></section>
+
+<section id="accounts"><div class="wrap">
+  <h2>Accounts you can connect</h2>
+  <p>All of them are optional.</p>
+  <div class="grid">
+    <div class="card"><h3>Claude</h3><p>The assistant runs on Claude Code with your own account. The wizard opens its official sign-in.</p></div>
+    <div class="card"><h3>Spotify</h3><p>Uses a free Spotify developer app that you create, plus Spotify's own sign-in page. Playback control needs Premium.</p></div>
+    <div class="card"><h3>Gmail</h3><p>Uses a Google app password that you can revoke at any time.</p></div>
+    <div class="card"><h3>WhatsApp</h3><p>Experimental and not in every build. You choose read only, or read and write. It links by QR code through an unofficial client, so WhatsApp could restrict the account, more so if you send messages.</p></div>
+  </div>
+</div></section>
+
+<section id="privacy"><div class="wrap">
+  <h2>What stays on your PC</h2>
+  <ul class="plain">
+    <li><b>Voice:</b> the microphone stays on while the assistant waits for “Cortex”, and it can wake by mistake. You can pause it at any time. Speech is recognised locally; the text goes to Claude with your account, and replies are read aloud through Microsoft Edge's online voices.</li>
+    <li><b>Keys and passwords:</b> kept on your PC. This site has no server and no accounts.</li>
+    <li><b>Uninstalling:</b> removes the program and keeps your data, and tells you which folder to delete if you want it gone.</li>
+  </ul>
+</div></section>
+</main>
+<footer><div class="wrap">Made by <a href="https://charlieandersen.vercel.app">Charlie Andersen</a> · <a href="https://github.com/xandrsn/cortex">Source on GitHub</a> · Not affiliated with Anthropic, Spotify, Google or WhatsApp.</div></footer>
+</body></html>

@@ -1,108 +1,55 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cortex · gesture control and a voice assistant for Windows</title>
-<meta name="description" content="A hobby AI project in two apps: Cortex Sense turns webcam hand gestures into commands, Cortex Hub is a voice assistant and dashboard. They connect over a local WebSocket.">
-<style>
-:root{--bg:#0b0d10;--card:#14181d;--line:#262c34;--text:#e8eaed;--muted:#a8afb8;--accent:#6ea8fe;--ok:#7ddba3}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-a{color:var(--accent);text-underline-offset:3px}
-:focus-visible{outline:3px solid #fff;outline-offset:3px;border-radius:6px}
-header nav{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;padding:18px 0}
-header nav b{margin-right:auto;font-size:1.15rem}
-header nav a{color:var(--muted);text-decoration:none}header nav a:hover{color:var(--text)}
-.hero{padding:72px 0 64px}
-h1{font-size:clamp(2.4rem,6.5vw,4.4rem);line-height:1.05;letter-spacing:-.035em;margin:0 0 .4em;max-width:15ch}
-h2{font-size:clamp(1.6rem,3.5vw,2.2rem);letter-spacing:-.02em;line-height:1.2;margin:0 0 .4em}
-h3{margin:0 0 .3em;font-size:1.08rem}
-.lead,section>.wrap>p{color:var(--muted);max-width:58ch;margin:0 0 1.6em}
-.lead{font-size:1.2rem}
-.btn{display:inline-block;background:var(--accent);color:#0b0d10;font-weight:650;padding:.75em 1.4em;border-radius:12px;text-decoration:none}
-.btn:hover{background:#9ec5fe}
-.btn.alt{background:none;color:var(--text);box-shadow:inset 0 0 0 1px #46505c}.btn.alt:hover{background:var(--card)}
-.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.small{color:var(--muted);font-size:.92rem;margin:1em 0 0}
-section{padding:60px 0;border-top:1px solid var(--line)}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
-.card p{margin:0;color:var(--muted);font-size:.98rem}
-.sub{margin:36px 0 14px;display:flex;align-items:center;gap:10px}
-.tag{font-size:.8rem;font-weight:700;padding:.15em .75em;border-radius:99px;background:#173a28;color:var(--ok)}
-.tag.idea{background:#2a3038;color:var(--muted)}
-ol.steps{list-style:none;counter-reset:s;margin:0;padding:0}
-ol.steps li{counter-increment:s;position:relative;padding-left:54px}
-ol.steps li::before{content:counter(s);position:absolute;left:18px;top:18px;font-weight:800;color:var(--accent);font-size:1.2rem;line-height:1.3}
-ul.plain{margin:0;padding-left:1.2em;color:var(--muted);max-width:70ch}ul.plain li{margin:.45em 0}
-ul.plain b{color:var(--text)}
-footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--muted)}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-</style></head><body>
-<header class="wrap"><nav aria-label="Main"><b>Cortex</b><a href="#try">Try it</a><a href="#install">Install</a><a href="#accounts">Accounts</a><a href="#privacy">Privacy</a><a href="https://github.com/xandrsn/cortex">GitHub</a></nav></header>
+<title>Cortex Sense · control your PC with hand gestures</title>
+<meta name="description" content="Cortex Sense turns webcam hand gestures into commands on Windows: minimise everything, skip a track, open an app or run your own script. Try it live in the browser.">
+<link rel="stylesheet" href="/landing.css">
+</head><body>
+<header class="wrap"><nav aria-label="Main"><b>Cortex Sense</b><a href="/sense/">Live demo</a><a href="#how">How it works</a><a href="#actions">Actions</a><a href="#install">Install</a><a href="#privacy">Privacy</a><a href="https://github.com/xandrsn/cortex">GitHub</a></nav></header>
 <main>
 <div class="wrap hero">
-  <h1>Gestures in. Commands out.</h1>
-  <p class="lead">Cortex is a hobby AI project in two Windows apps. <b>Cortex Sense</b> reads your hands through the webcam, calibrates to you and turns 29 gestures (or your own) into keys, media, apps, window moves or Hub actions. <b>Cortex Hub</b> is a voice assistant and dashboard on top of an LLM. Each works alone; together they talk over a local WebSocket.</p>
-  <div class="row"><a class="btn" href="/demo/">Open the web demo</a><a class="btn alt" href="https://github.com/xandrsn/cortex/releases">Download for Windows</a></div>
-  <p class="small">v0.3.0 · Windows 10/11, 64-bit · Everything is in English; Spanish voice commands are still supported</p>
+  <h1>Your hands are the shortcut.</h1>
+  <p class="lead">Cortex Sense watches your webcam, finds your hands and turns a gesture into a command on your PC. A swipe skips the song, two open palms minimise everything, a rock sign runs your own script. You choose what each movement does.</p>
+  <div class="row"><a class="btn" href="/sense/">Try it with your camera</a><a class="btn alt" href="https://github.com/xandrsn/cortex/releases">Download for Windows</a></div>
+  <p class="small">v0.3.0 · Windows 10/11, 64-bit · Free and open source (MIT)</p>
 </div>
 
-<section id="try"><div class="wrap">
-  <h2>What you can try here</h2>
-  <p>The demo is the real panel with made-up data, saved only in your browser. Every card says whether it works or only shows the idea.</p>
-  <div class="sub"><span class="tag">Works in your browser</span></div>
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <p>Three steps, all on your computer.</p>
+  <ol class="steps grid">
+    <li class="card"><h3>See the hand</h3><p>MediaPipe finds 21 points on each hand in every frame of the webcam.</p></li>
+    <li class="card"><h3>Read the gesture</h3><p>29 built-in gestures: poses (thumb up, fist, OK, rock…), motions (swipes, flicks, circles, a wave) and two-handed ones. Or record your own.</p></li>
+    <li class="card"><h3>Run the action</h3><p>The gesture runs the command you picked for it, after a short hold so it does not fire by accident.</p></li>
+  </ol>
+  <p class="small">A calibration wizard measures your camera, light, hand size and pinch first, so it works at your desk. Gestures can be limited to when you are looking at the screen.</p>
+</div></section>
+
+<section id="actions"><div class="wrap">
+  <h2>Any movement, any action</h2>
+  <p>Pick from a list, or go as far as your own code.</p>
   <div class="grid">
-    <div class="card"><h3>Your day</h3><p>Tasks, reminders, timers, shopping list, gym and meals. Add, tick off and edit them.</p></div>
-    <div class="card"><h3>Typed commands</h3><p>Write “add milk to the list” or “timer for 5 minutes” (Spanish works too). The demo understands a few fixed phrases; the app uses Claude.</p></div>
-    <div class="card"><h3>Live weather</h3><p>A real forecast from Open-Meteo.</p></div>
-    <div class="card"><h3>Hand gestures</h3><p>Pinch, drag and snap sample windows with your camera or the mouse. <a href="/demo/gestures.html">Try the gestures</a></p></div>
-    <div class="card"><h3>Layout</h3><p>Choose, move and resize widgets, and switch the theme.</p></div>
-    <div class="card"><h3>Setup wizard</h3><p>Walk through the same first-run steps as the app. It never asks for a real password.</p></div>
-  </div>
-  <div class="sub"><span class="tag idea">Concept only on this site</span></div>
-  <div class="grid">
-    <div class="card"><h3>Voice</h3><p>In the app you say “Cortex…” and the voice assistant answers aloud. The microphone stays on while it waits for that word; that audio is processed on your PC.</p></div>
-    <div class="card"><h3>Spotify</h3><p>Play, skip and choose music. Here the player is a mock-up.</p></div>
-    <div class="card"><h3>Email and WhatsApp</h3><p>Summaries of what needs a reply. Here the messages are invented.</p></div>
-    <div class="card"><h3>Real windows</h3><p>The app moves the windows on your desktop. A web page cannot.</p></div>
-    <div class="card"><h3>Speakers and devices</h3><p>Change the audio output and volume by voice.</p></div>
-    <div class="card"><h3>Money</h3><p>Balances through Enable Banking, with your own keys.</p></div>
+    <div class="card"><h3>Windows</h3><p>Minimise everything, show the desktop, maximise, close, switch window, lock the PC. Pinch to grab a window and drop it on half the screen.</p></div>
+    <div class="card"><h3>Music and volume</h3><p>Play, pause, next, previous, volume, mute. Works with Spotify, the browser or any player.</p></div>
+    <div class="card"><h3>Apps and websites</h3><p>Open a program, a file or a URL.</p></div>
+    <div class="card"><h3>Keyboard shortcuts</h3><p>Any combination, like <code>ctrl+shift+m</code> to mute a call or <code>win+shift+s</code> for a screenshot.</p></div>
+    <div class="card"><h3>Your own scripts</h3><p>Run a PowerShell, Python or batch file with arguments: start a focus mode, deploy a build, switch your monitors.</p></div>
+    <div class="card"><h3>Your own gestures</h3><p>Hold a pose for three seconds and Sense learns it from your hand (nearest neighbours on normalised hand points).</p></div>
   </div>
 </div></section>
 
 <section id="install"><div class="wrap">
   <h2>Install</h2>
-  <p>Two installers, no administrator rights needed. Windows may warn you because they are not signed. <b>CortexSenseSetup.exe</b> shows a webcam privacy notice and opens a three-step calibration (look, hand size, pinch). <b>CortexHubSetup.exe</b> sets up the assistant:</p>
-  <ol class="steps grid">
-    <li class="card"><h3>Run CortexHubSetup.exe</h3><p>Choose the language and the folder.</p></li>
-    <li class="card"><h3>Pick your widgets</h3><p>Tick the cards you want on the panel. You can change them later.</p></li>
-    <li class="card"><h3>Pick your accounts</h3><p>Claude, Spotify, email or none. The installer never asks for a password.</p></li>
-    <li class="card"><h3>Sign in, one at a time</h3><p>Cortex opens a wizard that guides each login. You can skip any of them.</p></li>
-  </ol>
-  <p class="small">You need a microphone and speakers for voice, and a webcam for gestures. The speech model downloads the first time.</p>
-</div></section>
-
-<section id="accounts"><div class="wrap">
-  <h2>Accounts you can connect</h2>
-  <p>All of them are optional.</p>
-  <div class="grid">
-    <div class="card"><h3>Claude</h3><p>The assistant runs on Claude Code with your own account. The wizard opens its official sign-in.</p></div>
-    <div class="card"><h3>Spotify</h3><p>Uses a free Spotify developer app that you create, plus Spotify's own sign-in page. Playback control needs Premium.</p></div>
-    <div class="card"><h3>Gmail</h3><p>Uses a Google app password that you can revoke at any time.</p></div>
-    <div class="card"><h3>WhatsApp</h3><p>Experimental and not in every build. You choose read only, or read and write. It links by QR code through an unofficial client, so WhatsApp could restrict the account, more so if you send messages.</p></div>
-  </div>
+  <p>Download <b>CortexSenseSetup.exe</b> from the releases page. No administrator rights needed; Windows may warn you because it is not signed. It shows a webcam privacy notice, can start with Windows and opens the calibration.</p>
+  <p class="small">Needs a webcam. Also compatible with <a href="/hub/">Cortex Hub</a>, a voice assistant, if you use it; Sense works on its own.</p>
 </div></section>
 
 <section id="privacy"><div class="wrap">
   <h2>What stays on your PC</h2>
   <ul class="plain">
-    <li><b>Webcam:</b> frames are processed locally and never stored or sent.</li>
-    <li><b>Voice:</b> the microphone stays on while the assistant waits for “Cortex”, and it can wake by mistake. You can pause it at any time. Speech is recognised locally; the text goes to Claude with your account, and replies are read aloud through Microsoft Edge's online voices.</li>
-    <li><b>Keys and passwords:</b> kept on your PC. This site has no server and no accounts.</li>
-    <li><b>Uninstalling:</b> removes the program and keeps your data, and tells you which folder to delete if you want it gone.</li>
+    <li><b>Video:</b> every frame is processed on your computer and never stored or sent. The web demo works the same way, inside your browser tab.</li>
+    <li><b>Settings:</b> your gestures and actions are saved in a file next to the program. Only the local panel can change them.</li>
   </ul>
 </div></section>
 </main>
-<footer><div class="wrap">Made by <a href="https://charlieandersen.vercel.app">Charlie Andersen</a> · <a href="https://github.com/xandrsn/cortex">Source on GitHub</a> · Not affiliated with Anthropic, Spotify, Google or WhatsApp.</div></footer>
+<footer><div class="wrap">Made by <a href="https://charlieandersen.vercel.app">Charlie Andersen</a> · <a href="https://github.com/xandrsn/cortex">Source on GitHub</a> · Not affiliated with Google or Microsoft.</div></footer>
 </body></html>

@@ -1,13 +1,16 @@
 """A gesture's action → what happens on the PC.
 
-Types: a Hub action (config.HUB_ACTIONS), "media:<key>", "keys:ctrl+shift+m", "run:<program or URL>",
-"window:<minimize|maximize|close|desktop|switch>" or "none". Without Hub connected, the music ones go to the Windows
+Types: "window:<minimize|minimize_all|maximize|close|desktop|switch|lock>", "media:<key>", "keys:ctrl+shift+m",
+"run:<program or URL>", "script:<path to .ps1/.py/.bat/.cmd> [arguments]", a Cortex Hub action (config.HUB_ACTIONS) or "none". Without Hub connected, the music ones go to the Windows
 media keys (they work with Spotify, the browser, etc.).
 """
 
 import logging
 import os
+import shlex
+import subprocess
 import sys
+from pathlib import Path
 
 from .config import HUB_ACTIONS
 
@@ -22,7 +25,22 @@ NAMED = {"ctrl": 0x11, "control": 0x11, "shift": 0x10, "alt": 0x12, "win": 0x5B,
          "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28, "home": 0x24, "end": 0x23,
          "pageup": 0x21, "pagedown": 0x22, "printscreen": 0x2C}
 EXTENDED = {0x2E, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x5B} | set(MEDIA.values())
-WINDOW = ["minimize", "maximize", "close", "desktop", "switch"]
+WINDOW = ["minimize", "minimize_all", "maximize", "close", "desktop", "switch", "lock"]
+# how each script type is started; the window stays hidden, output goes to the Sense log
+SCRIPTS = {".ps1": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"], ".py": [sys.executable if not getattr(sys, "frozen", False) else "py"],
+           ".bat": ["cmd", "/c"], ".cmd": ["cmd", "/c"]}
+
+
+def script_args(arg: str) -> list[str]:
+    """'"C:\My scripts\a.ps1" -Fast' → [path, "-Fast"]. Quote a path that has spaces. ValueError if unusable."""
+    parts = [p.strip('"') for p in shlex.split(arg.strip(), posix=False)]
+    if not parts:
+        raise ValueError("missing script")
+    if Path(parts[0]).suffix.lower() not in SCRIPTS:
+        raise ValueError("scripts must be .ps1, .py, .bat or .cmd")
+    if not Path(parts[0]).is_file():
+        raise ValueError(f"script not found: {parts[0]}")
+    return parts
 
 
 def parse_keys(combo: str) -> list[int]:
@@ -52,6 +70,12 @@ def validate(action: str) -> str | None:
         return None if arg in WINDOW else f"unknown window action: {arg}"
     if kind == "run":
         return None if arg.strip() else "missing program"
+    if kind == "script":
+        try:
+            script_args(arg)
+            return None
+        except ValueError as e:
+            return str(e)
     if kind == "keys":
         try:
             parse_keys(arg)
@@ -85,6 +109,11 @@ def _window(op: str) -> None:
     u = ctypes.windll.user32
     if op == "desktop":
         return _press([0x5B, ord("D")])
+    if op == "minimize_all":
+        return _press([0x5B, ord("M")])
+    if op == "lock":
+        u.LockWorkStation()
+        return None
     if op == "switch":
         return _press([0x12, 0x09])
     hwnd = u.GetForegroundWindow()
@@ -112,5 +141,9 @@ def run(action: str) -> bool:
         _window(arg)
     elif kind == "run":
         os.startfile(arg.strip())   # program, file or URL, like Windows Run
+    elif kind == "script":
+        path, *rest = script_args(arg)
+        subprocess.Popen([*SCRIPTS[Path(path).suffix.lower()], path, *rest], cwd=Path(path).parent,
+                         creationflags=subprocess.CREATE_NO_WINDOW)
     log.info("Action %s", action)
     return True

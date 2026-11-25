@@ -1,6 +1,6 @@
 # Cortex
 
-A personal, AI-focused side project for Windows: two small apps that work alone or together.
+A personal, AI-focused side project for Windows: two separate apps. **Cortex Sense** maps hand gestures to actions on your PC and works on its own. **Cortex Hub** is a voice assistant and dashboard. They are compatible, but neither needs the other.
 
 | | **Cortex Sense** | **Cortex Hub** |
 |---|---|---|
@@ -11,7 +11,7 @@ A personal, AI-focused side project for Windows: two small apps that work alone 
 
 Built by [Charlie Andersen](https://charlieandersen.vercel.app). Hobby project, not a product: Windows only, unsigned installers, tested by its author.
 
-## How they connect
+## How they connect (optional)
 
 ```
  webcam ──► Cortex Sense ──────────── local WebSocket (ws://127.0.0.1:8766/ws) ─────────► Cortex Hub
@@ -22,7 +22,7 @@ Built by [Charlie Andersen](https://charlieandersen.vercel.app). Hobby project, 
 
 - **Sense owns the camera and the mapping** (`sense.yaml`). Each gesture maps to one action:
   - a Hub action (`next`, `toggle`, `listen`, `new_chat`, …), sent to Hub when it is connected;
-  - `media:<key>`, `keys:ctrl+shift+m`, `run:<program or URL>`, `window:<minimize|maximize|close|desktop|switch>` or `none`, run by Sense itself.
+  - `window:<minimize|minimize_all|maximize|close|desktop|switch|lock>`, `media:<key>`, `keys:ctrl+shift+m`, `run:<program or URL>`, `script:<file.ps1|.py|.bat|.cmd> [args]` or `none`, run by Sense itself. From "minimise everything" for anyone to your own scripts for developers.
 - **Without Hub**, music actions fall back to the system media keys, so Sense is useful on its own.
 - **Hub without Sense** works as a voice assistant; its gesture settings are proxied to Sense when it is running.
 - One webcam reader is shared between the gesture recogniser and the pinch-and-drag window controller.
@@ -81,7 +81,8 @@ src/sense/        camera sharing, vision, commands, calibration, FastAPI server
 src/sense/window/ pinch-and-drag window controller
 src/hub/          assistant, speech, LLM bridge, integrations, FastAPI server, SenseLink client
 web/sense/        Sense panel          web/hub/  Hub dashboard
-site/             landing page + static demo (python site/build.py after changing web/hub)
+site/             / Sense landing, /sense/ live camera demo, /hub/ Hub landing, /demo/ Hub demo
+                  (python site/build.py after changing web/hub)
 installer/        Inno Setup scripts   tests/    pytest + node tests
 ```
 

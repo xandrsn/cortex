@@ -35,17 +35,17 @@ DEFAULTS = {
     "pinch_grab": 40,                # px (window space) to grab a window; calibrated
     "pinch_release": 60,
     "calibration": {},               # last measurement: light, fps, hand size, dominant hand
-    # Gesture → action. Actions: one of HUB_ACTIONS, "media:<key>", "keys:ctrl+shift+m", "run:<program>",
-    # "window:<minimize|maximize|close|desktop|switch>" or "none".
+    # Gesture → action (see commands.py): "window:…", "media:…", "keys:…", "run:…", "script:…", a HUB_ACTIONS entry or "none".
+    # The defaults work without Cortex Hub; music ones go to Hub only when it is running.
     "gesture_actions": {
         "swipe_left": "next", "swipe_right": "previous", "open_palm": "toggle",
-        "thumb_up": "volume_up", "thumb_down": "volume_down", "pointing_up": "listen",
+        "thumb_up": "volume_up", "thumb_down": "volume_down", "pointing_up": "none",
         "victory": "none", "closed_fist": "none", "i_love_you": "none",
         "swipe_up": "window:maximize", "swipe_down": "window:minimize",
         "flick_right": "next", "flick_left": "previous", "circle_cw": "next", "circle_ccw": "previous",
-        "wag": "stop", "wave": "none", "push": "window:desktop",
-        "ok": "none", "shaka": "none", "rock": "none", "three": "none", "shush": "quiet",
-        "both_palms": "stop", "both_thumbs_up": "none", "both_thumbs_down": "none", "both_fists": "none",
+        "wag": "none", "wave": "none", "push": "window:desktop",
+        "ok": "none", "shaka": "none", "rock": "none", "three": "none", "shush": "media:mute",
+        "both_palms": "window:minimize_all", "both_thumbs_up": "none", "both_thumbs_down": "none", "both_fists": "none",
         "hands_apart": "volume_up", "hands_together": "volume_down",
     },
 }

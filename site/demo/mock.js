@@ -27,31 +27,59 @@ function parseAmount(text) {   // "5 minutes", "half an hour", "un minuto" (Span
 function freshState(now) {
   const t = Math.floor(now / 1000);
   return {
-    settings: {}, layout: [], timers: [], nextId: 10, history: [],
-    tasks: [
-      { i: 1, tarea: "Prepare the presentation", cuando: "Friday", estado: "", prioridad: "alta", notas: "" },
-      { i: 2, tarea: "Call the garage", cuando: "", estado: "", prioridad: "media", notas: "" },
-      { i: 3, tarea: "Sort the photos", cuando: "", estado: "in progress", prioridad: "baja", notas: "" },
+    settings: {}, layout: [], timers: [], nextId: 20,
+    // a morning that already happened, so the panel looks used
+    history: [
+      { role: "user", text: "Good morning, what do I have today?" },
+      { role: "assistant", text: "Morning! Focus block until 11, the design review at 11:30 and gym at 18:30. Two emails need a reply." },
+      { role: "user", text: "Remind me to call the garage after lunch" },
+      { role: "assistant", text: "Done: I'll remind you this afternoon to call the garage." },
+      { role: "user", text: "Put on something to focus" },
+      { role: "assistant", text: "Playing Golden Hour Drive on the laptop." },
     ],
-    compra: [{ text: "Milk", done: false }, { text: "Tomatoes", done: false }, { text: "Coffee", done: true }],
-    avisos: [{ id: "a1", at: now + 3 * 3600e3, texto: "Water the plants", repetir: "" }],
-    spotify: { connected: true, client_id: "demo", playing: false, track: 0, volume: 40, progress: 42_000, duration: 215_000, device: "Laptop (demo)" },
+    tasks: [
+      { i: 1, tarea: "Finish the slides for Friday's demo", cuando: "Friday", estado: "in progress", prioridad: "alta", notas: "Add the latency chart" },
+      { i: 2, tarea: "Call the garage about the MOT", cuando: "Today", estado: "", prioridad: "alta", notas: "" },
+      { i: 3, tarea: "Renew the gym membership", cuando: "This week", estado: "", prioridad: "media", notas: "" },
+      { i: 4, tarea: "Review Ana's pull request", cuando: "Tomorrow", estado: "", prioridad: "media", notas: "" },
+      { i: 5, tarea: "Book flights for the wedding", cuando: "", estado: "", prioridad: "media", notas: "Compare Friday vs Saturday" },
+      { i: 6, tarea: "Back up the photos to the NAS", cuando: "", estado: "", prioridad: "baja", notas: "" },
+      { i: 7, tarea: "Read chapter 4 of the RL book", cuando: "", estado: "in progress", prioridad: "baja", notas: "" },
+    ],
+    compra: ["Oat milk", "Eggs", "Spinach", "Greek yoghurt", "Bananas", "Coffee beans", "Chicken thighs", "Rice"].map((text, k) => ({ text, done: k === 5 })),
+    avisos: [
+      { id: "a1", at: now + 45 * 60e3, texto: "Stand up and stretch", repetir: "" },
+      { id: "a2", at: now + 3.5 * 3600e3, texto: "Call the garage", repetir: "" },
+      { id: "a3", at: now + 7 * 3600e3, texto: "Take out the recycling", repetir: "weekly" },
+      { id: "a4", at: now + 26 * 3600e3, texto: "Water the plants", repetir: "" },
+    ],
+    spotify: { connected: true, client_id: "demo", playing: true, track: 0, volume: 55, progress: 96_000, duration: 231_000, device: "Laptop" },
     chats: [
-      { jid: "c1", name: "Weekend group", real: "Weekend group", group: true, muted: false,
-        messages: [{ id: "1", from: "Lucy", text: "Shall we meet on Saturday?", time: t - 5400 }, { id: "2", from: "Mark", text: "Works for me, at 12", time: t - 5000 }] },
-      { jid: "c2", name: "Bakery", real: "Bakery", group: false, muted: true,
-        messages: [{ id: "3", from: "Bakery", text: "Your order is ready", time: t - 90_000 }] },
+      { jid: "c1", name: "Weekend crew", real: "Weekend crew", group: true, muted: false,
+        messages: [{ id: "1", from: "Lucy", text: "Paddle surf on Saturday?", time: t - 7200 }, { id: "2", from: "Mark", text: "In! 11 at the beach?", time: t - 6900 },
+          { id: "3", from: "Lucy", text: "Perfect, I'll bring the boards", time: t - 6600 }] },
+      { jid: "c2", name: "Mum", real: "Mum", group: false, muted: false,
+        messages: [{ id: "4", from: "Mum", text: "Are you coming for lunch on Sunday?", time: t - 3000 }] },
+      { jid: "c3", name: "Football 5-a-side", real: "Football 5-a-side", group: true, muted: false,
+        messages: [{ id: "5", from: "Dani", text: "We need one more for Thursday 21:00", time: t - 12_000 }] },
+      { jid: "c4", name: "Bakery", real: "Bakery", group: false, muted: true,
+        messages: [{ id: "6", from: "Bakery", text: "Your order is ready", time: t - 90_000 }] },
     ],
   };
 }
 
-const TRACKS = [["Low Tide", "The Examples", "#0b8f55"], ["Neon", "Made-Up Band", "#7c3aed"], ["Slow Sunday", "Sample Trio", "#ea580c"]];
+// invented artists, so no real album is implied
+const TRACKS = [["Golden Hour Drive", "Marlow Keys", "#1db954"], ["Paper Lanterns", "Ivy & the Coast", "#7c3aed"], ["Night Bus", "Okabe", "#2563eb"],
+  ["Slow Sunday", "The Lindens", "#ea580c"], ["Glasshouse", "Nora Vale", "#db2777"], ["Tidal", "Southpaw Club", "#0891b2"]];
 const art = (label, color) => "data:image/svg+xml," + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" fill="${color}"/><text x="80" y="54" font-size="28" text-anchor="middle">${label}</text></svg>`);
 
 const MAILS = [
-  { id: "m1", account: "principal", from: "Library", addr: "alerts@example.com", subject: "Your reservation is ready", ago: 3600 },
-  { id: "m2", account: "principal", from: "Hiking club", addr: "club@example.com", subject: "Sunday route", ago: 20_000 },
+  { id: "m1", account: "principal", from: "Ana Ruiz", addr: "ana@example.com", subject: "Re: design review moved to 11:30", ago: 1500 },
+  { id: "m2", account: "principal", from: "Garage", addr: "bookings@example.com", subject: "Your MOT is due on the 28th", ago: 5400 },
+  { id: "m3", account: "principal", from: "Airline", addr: "no-reply@example.com", subject: "Price alert: Seville to London from 39 EUR", ago: 14_000 },
+  { id: "m4", account: "principal", from: "Library", addr: "alerts@example.com", subject: "Your reservation is ready to collect", ago: 30_000 },
+  { id: "m5", account: "principal", from: "Hiking club", addr: "club@example.com", subject: "Sunday route: Grazalema loop, 14 km", ago: 70_000 },
 ];
 
 /** The "server". `emit` sends a message to the panel; `weather(place)` fetches the weather. No browser dependencies: it is tested with node. */
@@ -63,20 +91,23 @@ function createDemo({ state, defaults, emit = () => {}, save = () => {}, clock =
 
   function data() {
     const week = ["Legs", "Rest", "Back", "Chest", "Rest", "Easy run", "Rest"];
-    const meals = [["Lentils", "lunch and dinner"], ["Roast chicken", "lunch"], ["Pasta with vegetables", "lunch and dinner"], ["Salmon", "lunch"]];
+    const meals = [["Lentil stew", "lunch and dinner"], ["Roast chicken and potatoes", "lunch"], ["Pasta with pesto", "lunch and dinner"],
+      ["Salmon and rice", "lunch"], ["Chickpea curry", "lunch and dinner"], ["Homemade pizza", "dinner"], ["Paella", "lunch"]];
     const wd = (new Date(clock()).getDay() + 6) % 7;
     return {
       ok: true,
-      today: { mode: "Sample day", day: "", items: [
-        { hora: "09:00", fin: "11:00", que: "Deep work" }, { hora: "11:30", fin: "12:30", que: "Sample meeting" },
-        { hora: "14:30", fin: "15:30", que: "Lunch" }, { hora: "18:30", fin: "19:45", que: "Gym" }, { hora: "21:00", fin: "22:00", que: "Dinner" }] },
+      today: { mode: "Work day", day: "", items: [
+        { hora: "08:00", fin: "08:30", que: "Breakfast" }, { hora: "09:00", fin: "11:00", que: "Focus block" },
+        { hora: "11:30", fin: "12:15", que: "Design review" }, { hora: "14:00", fin: "15:00", que: "Lunch" },
+        { hora: "15:30", fin: "17:30", que: "Pull requests" }, { hora: "18:30", fin: "19:45", que: "Gym" }, { hora: "21:00", fin: "22:00", que: "Dinner" }] },
       tasks: S.tasks,
-      betis: [{ partido: "Sample match", cuando: day(3), hora: "21:00" }, { partido: "Another match", cuando: day(9), hora: "18:30" }],
-      gym: { today: week[wd] === "Rest" ? "" : week[wd], tomorrow: week[(wd + 1) % 7], notes: ["Made-up data"],
+      betis: [{ partido: "Betis vs Valencia", cuando: day(3), hora: "21:00" }, { partido: "Girona vs Betis", cuando: day(9), hora: "18:30" },
+        { partido: "Betis vs Celta", cuando: day(16), hora: "16:15" }],
+      gym: { today: week[wd] === "Rest" ? "" : week[wd], tomorrow: week[(wd + 1) % 7], notes: ["Squat 3x8 at 70 kg last time", "Stretch 10 min after"],
         week: week.map((que, i) => ({ dia: ["L", "M", "X", "J", "V", "S", "D"][i], que, hoy: i === wd })) },
       menu: meals.map(([plato, cubre], i) => ({ dia: day(i), plato, cubre, hoy: i === 0 })),
-      money: { colchon: 1500, queda: 320, gastos: 480, ingresos: 800 },
-      dates: [{ cuando: day(5), que: "Sample birthday" }],
+      money: { colchon: 3200, queda: 610, gastos: 1040, ingresos: 1650 },
+      dates: [{ cuando: day(2), que: "Lucy's birthday" }, { cuando: day(5), que: "Dentist, 10:00" }, { cuando: day(12), que: "Wedding in Cadiz" }],
     };
   }
 
@@ -117,8 +148,8 @@ function createDemo({ state, defaults, emit = () => {}, save = () => {}, clock =
       return { jid: c.jid, name: c.mote || c.real, real: c.real, group: c.group, muted: c.muted, time: last.time, mine: !!last.mine, text: last.text, from: c.group && !last.mine ? last.from : "" };
     }) };
   }
-  const devices = () => ({ music: [{ id: "d1", name: "Laptop (demo)", type: "Computer", active: true }, { id: "d2", name: "Living room speaker", type: "Speaker", active: false }],
-    lan: [{ name: "Sample TV", kinds: ["Chromecast"], ip: "192.0.2.10" }], scanned_at: clock() / 1000 });
+  const devices = () => ({ music: [{ id: "d1", name: "Laptop", type: "Computer", active: true }, { id: "d2", name: "Living room speaker", type: "Speaker", active: false }],
+    lan: [{ name: "Living room TV", kinds: ["Chromecast"], ip: "192.0.2.10" }], scanned_at: clock() / 1000 });
   const settingsPage = () => ({ settings: settings(), devices: { inputs: ["Microphone (demo)"], outputs: ["Speakers (demo)"] }, options: {
     voices: { es: ["es-ES-XimenaNeural", "es-ES-ElviraNeural", "es-ES-AlvaroNeural"], en: ["en-US-AvaMultilingualNeural"] },
     stt: ["parakeet", "whisper-small", "whisper-base"], claude: ["haiku", "sonnet", "opus"] } });
@@ -158,12 +189,12 @@ function createDemo({ state, defaults, emit = () => {}, save = () => {}, clock =
     if (/(m[uú]sica|canci[oó]n|spotify|music|song)/.test(low)) {
       S.spotify.playing = !/para|pausa|quita|\b(stop|pause)\b/.test(low);
       changed("spotify", spotify());
-      return S.spotify.playing ? "Sample music: in the app it would play on your Spotify." : "Music stopped.";
+      return S.spotify.playing ? "Playing. In the app this plays on your Spotify." : "Music stopped.";
     }
     if (/tareas?|tasks?/.test(low)) return S.tasks.length ? `You have ${S.tasks.length} tasks. The first one: ${S.tasks[0].tarea}.` : "You have no tasks.";
     if (/qu[eé] tengo|mi d[ií]a|resumen|matinal|buenos d[ií]as|what do i have|my day|summary|briefing|good morning/.test(low)) {
       const d = data();
-      return `Today: ${d.today.items.map(i => `${i.que.toLowerCase()} at ${i.hora}`).join(", ")}. You have ${S.tasks.length} tasks and ${MAILS.length} sample emails.`;
+      return `Today: ${d.today.items.map(i => `${i.que.toLowerCase()} at ${i.hora}`).join(", ")}. You have ${S.tasks.length} tasks and ${MAILS.length} unread emails.`;
     }
     if (/qu[eé] hora|what time/.test(low)) return `It's ${new Date(clock()).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.`;
     return `This is the demo: it understands a few commands and does not use Claude. ${EXAMPLES}`;
@@ -211,8 +242,8 @@ function createDemo({ state, defaults, emit = () => {}, save = () => {}, clock =
       return { ok: true, data: data() };
     },
     "GET /api/bank": () => ({ ok: true, fetched_at: clock() / 1000, accounts: [{ balance: { amount: 842.5 }, recent: [
-      { date: new Date(clock() - 864e5).toISOString().slice(0, 10), description: "Supermarket (sample)", amount: -23.4, pending: false },
-      { date: new Date(clock() - 3 * 864e5).toISOString().slice(0, 10), description: "Salary (sample)", amount: 800, pending: false }] }] }),
+      ...[["Supermarket", -23.4, 0], ["Coffee shop", -3.2, 0], ["Gym membership", -34.9, 1], ["Train tickets", -18.6, 2], ["Salary", 1650, 3], ["Electricity", -41.75, 4]]
+        .map(([description, amount, d]) => ({ date: new Date(clock() - d * 864e5).toISOString().slice(0, 10), description, amount, pending: d === 0 }))] }] }),
     "GET /api/timers": timers,
     "POST /api/timers": b => {
       if (b.cancel) { S.timers = S.timers.filter(t => t.id !== b.cancel); save(S); }
@@ -270,8 +301,8 @@ function createDemo({ state, defaults, emit = () => {}, save = () => {}, clock =
     },
     "GET /api/devices": devices,
     "POST /api/devices/scan": devices,
-    "GET /api/youtube": (_, q) => ({ ok: true, results: ["Sample video", "Another video", "Made-up livestream"].map((title, i) => ({
-      id: "demo" + i, title: `${title}: ${q.get("q") || ""}`, thumb: art("▶", TRACKS[i][2]), length: `${i + 2}:30`, channel: "Sample channel" })) }),
+    "GET /api/youtube": (_, q) => ({ ok: true, results: ["Full highlights", "Press conference", "Tactical analysis"].map((title, i) => ({
+      id: "demo" + i, title: `${title}: ${q.get("q") || ""}`, thumb: art("▶", TRACKS[i][2]), length: `${i + 2}:30`, channel: "Football Daily" })) }),
     "GET /api/video/services": () => ({ services: settings().video_services.filter(s => s.enabled).map(({ name, url }) => ({ name, url })) }),
     "POST /api/video": () => { emit({ type: "notice", text: DEMO_ONLY_APP }); return no; },
     "GET /api/web/accounts": () => ({ accounts: [] }),
@@ -410,7 +441,7 @@ if (typeof window !== "undefined") (() => {
     .demo-bar > :first-child { margin-right: auto; }
   </style>`);
   document.body.insertAdjacentHTML("afterbegin", `<div class="demo-bar" role="note"><span><b>Web demo</b> · made-up data, stored only in this browser. “Concept” cards show the idea; they work in the app.</span>
-    <a href="/">Home and download</a><a href="/demo/gestures.html">Try the gestures</a><button type="button" id="demoReset">Reset</button></div>`);
+    <a href="/hub/">About Hub</a><button type="button" id="demoReset">Reset</button></div>`);
   document.getElementById("demoReset").onclick = () => { localStorage.removeItem(KEY); sessionStorage.removeItem("setupStep"); location.reload(); };
 
   addEventListener("click", e => {
@@ -423,7 +454,7 @@ if (typeof window !== "undefined") (() => {
     } else if (e.target.closest("#cameraBtn, [data-open-camera]")) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      location.href = "/demo/gestures.html";
+      location.href = "/sense/";
     }
   }, true);
   // No password can be typed in the demo (not even in forms created later)

@@ -53,7 +53,7 @@ DEFAULTS = {
     "piper_es": "es_ES-davefx-medium",
     "piper_en": "en_US-lessac-medium",
     "notice_language": "en",
-    "theme": "light",            # light | dark | auto
+    "theme": "dark",             # dark | light | auto
     "spotify_device": "",        # "" = this laptop (desktop Spotify); otherwise the Connect device name
     "ui_port": 8765,
     # First run: the installer writes the choices to config.yaml and the dashboard wizard finishes setup
@@ -62,7 +62,7 @@ DEFAULTS = {
     "setup_accounts": ["claude", "spotify", "email", "whatsapp"],
     "whatsapp_mode": "read",     # read (read only) | write (read and write from the dashboard)
     # Dashboard
-    "accent": "#0b8f55",
+    "accent": "#1db954",
     "text_scale": 1,
     "ambient_minutes": 10,           # big clock after X min of inactivity (0 = never)
     "weather_place": {"name": "Madrid", "lat": 40.4168, "lon": -3.7038},

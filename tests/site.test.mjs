@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { classify, snapZone } from "../site/demo/gestures.mjs";
+import { classify, swipe, ACTIONS, DEFAULTS, GESTURES } from "../site/sense/sense.mjs";
 const { createDemo, freshState, parseAmount, wmo } = createRequire(import.meta.url)("../site/demo/mock.js");
 
 const box = { window: {} };
@@ -87,11 +87,14 @@ for (let n = 1; n <= ids.length; n++) {
 }
 assert.deepEqual(layoutFor(["nada"]), layoutFor(undefined));
 
-// ---------- gestures ----------
-const hand = (up, thumb = { x: 0.2, y: 0.5 }) => {
+// ---------- Sense demo gestures ----------
+// fingers point up (y down in the image); knuckles 5/9/13/17 at y .6, wrist at .9
+const hand = (up, thumb = { x: 0.45, y: 0.62 }) => {
   const lm = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.9 }));
-  lm[9] = { x: 0.5, y: 0.6 };
-  [[8, 6, .4], [12, 10, .5], [16, 14, .6], [20, 18, .7]].forEach(([tip, pip, x], i) => { lm[pip] = { x, y: 0.5 }; lm[tip] = { x, y: up[i] ? 0.2 : 0.75 }; });
+  [[8, 6, 5, .4], [12, 10, 9, .5], [16, 14, 13, .6], [20, 18, 17, .7]].forEach(([tip, pip, mcp, x], i) => {
+    lm[mcp] = { x, y: 0.6 }; lm[pip] = { x, y: 0.5 }; lm[tip] = { x, y: up[i] ? 0.2 : 0.75 };
+  });
+  lm[3] = { x: 0.35, y: 0.65 };
   lm[4] = thumb === "index" ? { ...lm[8] } : thumb;
   return lm;
 };
@@ -99,6 +102,20 @@ assert.equal(classify(hand([1, 1, 1, 1])), "palm");
 assert.equal(classify(hand([0, 0, 0, 0])), "fist");
 assert.equal(classify(hand([0, 0, 0, 0], "index")), "fist");
 assert.equal(classify(hand([1, 1, 0, 0])), "peace");
-assert.equal(classify(hand([1, 1, 1, 1], "index")), "pinch");
-assert.deepEqual([snapZone(.5, .02), snapZone(.02, .5), snapZone(.98, .5), snapZone(.5, .5)], ["full", "left", "right", ""]);
+assert.equal(classify(hand([1, 1, 1, 0])), "three");
+assert.equal(classify(hand([1, 0, 0, 0])), "point");
+assert.equal(classify(hand([1, 0, 0, 1])), "rock");
+assert.equal(classify(hand([1, 0, 0, 1], { x: 0.1, y: 0.6 })), "love");
+assert.equal(classify(hand([0, 0, 0, 1], { x: 0.1, y: 0.6 })), "shaka");
+assert.equal(classify(hand([1, 1, 1, 1], "index")), "ok");
+assert.equal(classify(hand([0, 0, 0, 0], { x: 0.35, y: 0.3 })), "thumb_up");
+assert.equal(classify(hand([0, 0, 0, 0], { x: 0.35, y: 1.0 })), "thumb_down");
+const path = (dx, dy, ms = 300) => [0, 1, 2, 3].map((k) => ({ t: k * ms / 3, x: 0.5 + dx * k / 3, y: 0.5 + dy * k / 3 }));
+assert.equal(swipe(path(-0.3, 0)), "swipe_right", "the image is not mirrored: moving left in it is the user's right");
+assert.equal(swipe(path(0.3, 0.05)), "swipe_left");
+assert.equal(swipe(path(0, -0.3)), "swipe_up");
+assert.equal(swipe(path(0.1, 0.1)), "");
+assert.equal(swipe(path(0.3, 0, 2000)), "", "too slow is not a swipe");
+assert.equal(swipe([]), "");
+assert.ok(Object.entries(DEFAULTS).every(([g, a]) => g in GESTURES && a in ACTIONS), "every default is a known gesture and action");
 console.log("ok");

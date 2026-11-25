@@ -22,7 +22,8 @@ def test_parse_keys():
 @pytest.mark.parametrize("action,ok", [
     ("none", True), ("next", True), ("listen", True), ("media:play_pause", True), ("media:jump", False),
     ("keys:ctrl+c", True), ("keys:", False), ("run:notepad", True), ("run: ", False),
-    ("window:minimize", True), ("window:fly", False), ("rm -rf", False),
+    ("window:minimize", True), ("window:minimize_all", True), ("window:lock", True), ("window:fly", False), ("rm -rf", False),
+    ("script:", False), ("script:missing.ps1", False),
 ])
 def test_validate(action, ok):
     assert (commands.validate(action) is None) == ok
@@ -30,6 +31,15 @@ def test_validate(action, ok):
 
 def test_every_default_mapping_is_valid():
     assert all(commands.validate(a) is None for a in DEFAULTS["gesture_actions"].values())
+
+
+def test_script_actions_need_a_real_script_file(tmp_path):
+    ps1 = tmp_path / "my script.ps1"
+    ps1.write_text("Write-Output hi")
+    (tmp_path / "x.exe").write_text("")
+    assert commands.validate(f'script:"{ps1}" -Fast') is None
+    assert commands.script_args(f'"{ps1}" -Fast') == [str(ps1), "-Fast"]
+    assert "ps1" in commands.validate(f"script:{tmp_path / 'x.exe'}")   # programs go in run:, scripts in script:
 
 
 def test_route_sends_hub_actions_to_hub_or_falls_back_to_media_keys():

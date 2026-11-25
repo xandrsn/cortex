@@ -17,7 +17,14 @@ const HUB = {
   listen: "Start listening", stop: "Stop the assistant", quiet: "Mute the assistant", ambient: "Ambient clock",
   wake_toggle: "Wake word on/off", new_chat: "New conversation", theme: "Light / dark theme",
 };
-const KINDS = { none: "Nothing", hub: "Hub action", media: "Media key", keys: "Shortcut", run: "Open program", window: "Window" };
+// Simple choices first, developer ones last; Hub only matters if you also run Cortex Hub
+const KINDS = { none: "Nothing", window: "Windows", media: "Music & volume", run: "Open an app or website", keys: "Keyboard shortcut",
+  script: "Run a script", hub: "Cortex Hub (if installed)" };
+const WINDOW = { minimize_all: "Minimise everything", desktop: "Show the desktop", minimize: "Minimise this window",
+  maximize: "Maximise this window", close: "Close this window", switch: "Switch window (Alt+Tab)", lock: "Lock the PC" };
+const MEDIA = { play_pause: "Play / pause", next: "Next track", previous: "Previous track", stop: "Stop", volume_up: "Volume up",
+  volume_down: "Volume down", mute: "Mute" };
+const PLACEHOLDER = { keys: "ctrl+shift+m", run: "notepad, spotify or https://…", script: '"C:\scripts\focus.ps1" -Quiet' };
 
 let settings = {}, catalog = null, vision = {}, lastFired = null;
 
@@ -30,8 +37,8 @@ function split(action) {
 }
 
 function paramField(kind, value) {
-  const opts = kind === "hub" ? HUB : kind === "media" ? Object.fromEntries(catalog.media.map((m) => [m, m.replace("_", " ")]))
-    : kind === "window" ? Object.fromEntries(catalog.window.map((w) => [w, w])) : null;
+  const opts = kind === "hub" ? HUB : kind === "media" ? Object.fromEntries(catalog.media.map((m) => [m, MEDIA[m] || m.replace("_", " ")]))
+    : kind === "window" ? Object.fromEntries(catalog.window.map((w) => [w, WINDOW[w] || w])) : null;
   if (opts) {
     const sel = document.createElement("select");
     for (const [v, t] of Object.entries(opts)) sel.add(new Option(t, v));
@@ -40,7 +47,8 @@ function paramField(kind, value) {
   }
   const inp = document.createElement("input");
   inp.value = value;
-  inp.placeholder = kind === "keys" ? "ctrl+shift+m" : kind === "run" ? "notepad or https://…" : "";
+  inp.placeholder = PLACEHOLDER[kind] || "";
+  if (kind === "script") inp.title = ".ps1, .py, .bat or .cmd; quote paths with spaces; arguments after the path";
   inp.disabled = kind === "none";
   return inp;
 }

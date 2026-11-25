@@ -854,3 +854,32 @@ body:not(.editing) .grid-stack > .grid-stack-item:hover > .ui-resizable-se, body
 .setup-qr { width: 220px; padding: 10px; border-radius: 14px; background: #fff; }
 .setup-foot { display: flex; align-items: center; gap: 10px; }
 .setup-foot #setupNext { margin-left: auto; }
+
+/* ---------- look: Spotify-like (dark, flat, green, bold type); last so it wins over the older rules above ---------- */
+:root {
+  --bg: #f6f6f6; --card: #ffffff; --card-2: #efefef; --line: #e3e3e3; --text: #121212; --muted: #5f5f5f; --faint: #8a8a8a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06); --shadow-lg: 0 12px 40px rgba(0, 0, 0, .18); --radius: 10px; --on-accent: #000;
+}
+:root[data-theme="dark"] {
+  --bg: #121212; --card: #181818; --card-2: #282828; --line: #2a2a2a; --text: #ffffff; --muted: #b3b3b3; --faint: #7a7a7a;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, #181818); --shadow: none; --shadow-lg: 0 16px 48px rgba(0, 0, 0, .6);
+}
+body {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 26%, var(--bg)) 0, var(--bg) 360px) no-repeat, var(--bg);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing: -.005em;
+}
+.hello h1 { font-weight: 800; letter-spacing: -.04em; }
+.card { background: var(--card); box-shadow: var(--shadow); transition: background .2s; }
+.grid-stack .card:hover { transform: none; background: var(--card-2); box-shadow: var(--shadow); }
+.card-head h2 { font-weight: 700; font-size: 1.05rem; letter-spacing: -.02em; }
+.bubble { border-radius: 6px; box-shadow: none; background: color-mix(in srgb, var(--hue) 28%, var(--card-2)); }
+.chip { background: var(--card-2); box-shadow: none; }
+.btn { background: var(--accent); color: var(--on-accent); font-weight: 700; letter-spacing: .01em; padding: 9px 20px; }
+.btn:hover { filter: brightness(1.08); transform: scale(1.03); }
+.icon-btn:hover { background: var(--card-2); }
+.msg { border-radius: 12px; }
+.msg.user { color: var(--on-accent); }
+.sp-cover { border-radius: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+.sp-play { background: var(--accent); color: var(--on-accent); }
+.sp-play:hover { transform: scale(1.06); }
+.sp-progress:hover span { background: var(--accent); }

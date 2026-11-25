@@ -65,7 +65,7 @@ const ACTIONS = {
   stop: "Cut off the assistant (stops everything)", quiet: "Silence the assistant (it keeps working)", ambient: "Idle mode", wake_toggle: "Pause/enable \"Cortex\"",
   new_chat: "New conversation", theme: "Toggle light/dark",
 };
-const ACCENTS = ["#0b8f55", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#111827"];
+const ACCENTS = ["#1db954", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#111827"];
 
 let ws;
 let grid;
@@ -1622,7 +1622,11 @@ function applySettings(s) {
     : s.theme;
   const root = document.documentElement;
   root.dataset.theme = theme;
-  if (s.accent) root.style.setProperty("--accent", s.accent);
+  if (s.accent) {
+    root.style.setProperty("--accent", s.accent);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(s.accent.slice(i, i + 2), 16));   // black text on light accents, white on dark ones
+    root.style.setProperty("--on-accent", 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#000" : "#fff");
+  }
   root.style.setProperty("--scale", s.text_scale || 1);
   renderVision(vision);
   requestAnimationFrame(fitGrid);

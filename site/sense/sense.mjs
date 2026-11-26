@@ -112,7 +112,8 @@ function start() {
   // ---------- drawing ----------
   const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
   function draw(hands, pose) {
-    const w = canvas.width = video.videoWidth, h = canvas.height = video.videoHeight;
+    const w = video.videoWidth, h = video.videoHeight;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // resizing reallocates the canvas: only when it changes
     ctx.clearRect(0, 0, w, h);
     for (const lm of hands) {
       ctx.lineWidth = Math.max(2, w / 220); ctx.strokeStyle = "#6ea8fe"; ctx.beginPath();
@@ -128,7 +129,7 @@ function start() {
 
   // ---------- camera loop ----------
   const HOLD = 450, COOLDOWN = 900;   // ms a pose must stay; ms before the next gesture (the app has the same two settings)
-  let stream = null, landmarker = null, raf = 0, busy = false, track = [], seen = "none", since = 0, done = false, quietUntil = 0, frames = 0, fpsAt = 0;
+  let stream = null, landmarker = null, raf = 0, busy = false, lastT = -1, track = [], seen = "none", since = 0, done = false, quietUntil = 0, frames = 0, fpsAt = 0;
   function stop(text = "Camera off.") {
     cancelAnimationFrame(raf);
     stream?.getTracks().forEach((t) => t.stop());
@@ -142,10 +143,12 @@ function start() {
     if (!landmarker) {
       const mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/vision_bundle.mjs");
       const files = await mp.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/wasm");
-      landmarker = await mp.HandLandmarker.createFromOptions(files, { runningMode: "VIDEO", numHands: 2, baseOptions: {
+      const opts = (delegate) => ({ runningMode: "VIDEO", numHands: 2, baseOptions: { delegate,
         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" } });
+      // the GPU (WebGL) is several times faster; fall back to the CPU where WebGL is missing
+      landmarker = await mp.HandLandmarker.createFromOptions(files, opts("GPU")).catch(() => mp.HandLandmarker.createFromOptions(files, opts("CPU")));
     }
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 960, height: 720 } });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: { ideal: 60 } } });
     video.srcObject = stream;
     await video.play();
     button.textContent = "Turn off the camera"; status.textContent = "Show your hand to the camera.";
@@ -155,6 +158,8 @@ function start() {
   function loop() {
     if (!stream) return;
     raf = requestAnimationFrame(loop);
+    if (video.currentTime === lastT) return;   // same camera frame as last time: nothing new to detect
+    lastT = video.currentTime;
     const now = performance.now();
     const hands = landmarker.detectForVideo(video, now).landmarks;
     frames++;
